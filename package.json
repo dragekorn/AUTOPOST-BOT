@@ -1,13 +1,13 @@
 {
   "name": "rsstopost_bot",
-  "version": "0.0.1",
-  "description": "",
+  "version": "0.0.2",
+  "description": "Бот, который импортирует списки RSS и формирует в посты в указанную группу/канал в телеграмм. Имеет платную попдиску с авторизацией через лицензионный ключ.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "DrageKorn",
+  "author": "DrageKorn/ООО'ДРЭГОНЛОР'",
   "license": "ISC",
   "dependencies": {
     "axios": "^1.6.7",
