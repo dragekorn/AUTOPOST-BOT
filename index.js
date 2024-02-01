@@ -10,14 +10,13 @@ const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const subscribeScene = new Scenes.BaseScene('subscribeScene');
 subscribeScene.enter((ctx) => {
     ctx.reply('Пожалуйста, отправьте RSS ссылку.');
-    ctx.session.awaitingInput = 'rssLink'; // Установите ожидаемый ввод в "rssLink"
-    // Установка таймера ожидания
+    ctx.session.awaitingInput = 'rssLink';
     ctx.session.timeout = setTimeout(() => {
         if (ctx.scene.current) {
             ctx.reply('Вы не ввели ссылку на RSS-ленту. Чтобы попробовать заново, введите команду /subscribe');
             ctx.scene.leave();
         }
-    }, 60000); // 1 минута ожидания
+    }, 60000);
 });
 
 subscribeScene.on('text', async (ctx) => {
@@ -25,7 +24,7 @@ subscribeScene.on('text', async (ctx) => {
         const rssLink = ctx.message.text;
         if (/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(rssLink)) {
             ctx.session.rssLink = rssLink;
-            ctx.session.awaitingInput = 'channelId'; // Переходим к ожиданию ввода ID канала
+            ctx.session.awaitingInput = 'channelId';
             await ctx.reply('Теперь отправьте мне ID канала или группы, куда следует отправлять посты.');
         } else {
             await ctx.reply('Введите, пожалуйста, корректную ссылку на RSS-ленту.');
@@ -33,15 +32,14 @@ subscribeScene.on('text', async (ctx) => {
     } else if (ctx.session.awaitingInput === 'channelId') {
         const channelId = ctx.message.text;
         if (/^-100\d{10}$/.test(channelId)) {
-            // После получения корректного ID канала, выполните необходимые действия
             let channelName = '';
             try {
                 const chat = await bot.telegram.getChat(channelId);
                 channelName = chat.title;
                 await saveSubscription(ctx.from.id, ctx.session.rssLink, channelId, channelName);
                 await ctx.reply(`Вы подписались на обновления: ${ctx.session.rssLink} для канала/группы: ${channelName} [ID: ${channelId}]`);
-                clearTimeout(ctx.session.timeout); // Отмена таймера ожидания
-                ctx.scene.leave(); // Выход из сцены
+                clearTimeout(ctx.session.timeout);
+                ctx.scene.leave();
             } catch (error) {
                 console.error('Ошибка при получении названия канала:', error);
                 await ctx.reply('Произошла ошибка при получении информации о канале. Пожалуйста, проверьте ID и попробуйте снова.');
@@ -60,12 +58,11 @@ bot.start((ctx) => {
     const welcomeMessage = '<b>Добро пожаловать в бота RSSAutoParser&Post!</b>\n\nЕсли Вы уже приобрели подписку, пожалуйста, введите команду <code>/auth ВашКод</code>\n\nПосле успешной авторизации Вы сможете использовать команду /subscribe.\n\nЕсли Вы ещё не приобрели лицензионный ключ, обратитесь к @russelallen\n\n<b>Желаем приятной работы с ботом!</b>';
     const imagePath = path.resolve(__dirname, 'logoAutoPostBot.png');
 
-    // Отправка локального изображения с подписью
     ctx.replyWithPhoto({ source: fs.createReadStream(imagePath) }, { caption: welcomeMessage, parse_mode: 'HTML' });
 });
 
 bot.command('subscribe', async (ctx) => {
-    const userId = ctx.from.id.toString(); // Убедитесь, что userId в строковом формате
+    const userId = ctx.from.id.toString();
     const user = await Subscription.findOne({ userId });
   
     if (!user || !user.licKeys) {
@@ -78,15 +75,13 @@ bot.command('subscribe', async (ctx) => {
   
 
 bot.command('auth', async (ctx) => {
-    const userKey = ctx.message.text.split(' ')[1]; // Предполагаем, что ключ идет после команды /auth
+    const userKey = ctx.message.text.split(' ')[1];
     const keys = require('./key.json');
   
     if (keys.includes(userKey)) {
-      // Удалите использованный ключ из списка и обновите файл
       const updatedKeys = keys.filter(key => key !== userKey);
       fs.writeFileSync('key.json', JSON.stringify(updatedKeys));
   
-      // Запишите ключ в базу данных для данного пользователя
       await Subscription.findOneAndUpdate({ userId: ctx.from.id }, { $set: { licKeys: userKey } }, { upsert: true });
       ctx.reply('Вы успешно авторизованы. Теперь вы можете использовать команду /subscribe.');
     } else {
@@ -119,7 +114,7 @@ bot.command('my_subscriptions', async (ctx) => {
             sub.rssFeeds.forEach(feed => {
                 message += `${feed}\n`;
             });
-            message += '➖➖➖\n'; // Разделитель между каналами
+            message += '➖➖➖\n';
         });
 
         ctx.replyWithHTML(message);
@@ -171,10 +166,10 @@ const checkAndSendUpdates = async () => {
                 }
             } catch (error) {
                 if (error.response && error.response.error_code === 429) {
-                    const retryAfter = error.response.parameters.retry_after * 1000; // Преобразование секунд в миллисекунды
+                    const retryAfter = error.response.parameters.retry_after * 1000;
                     console.log(`Waiting for ${retryAfter}ms before retrying...`);
                     setTimeout(() => checkAndSendUpdates(), retryAfter);
-                    return; // Остановка текущего цикла обработки и переход к следующему
+                    return;
                 } else {
                     console.error(`Ошибка при отправке сообщения в ${channelId}:`, error);
                 }

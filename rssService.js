@@ -76,16 +76,16 @@ const getNewRSSPosts = async (rssLink, channelId) => {
                 };
             } catch (error) {
                 console.error(`Error processing post from RSS feed ${rssLink}:`, error);
-                return null; // Возвращаем null для пропуска поста
+                return null;
             }
         });
 
-        const resolvedPosts = (await Promise.all(newPostsPromises)).filter(post => post != null); // Фильтруем null значения
+        const resolvedPosts = (await Promise.all(newPostsPromises)).filter(post => post != null);
         await saveSentPosts(channelId, resolvedPosts.map(post => post.item.link));
         return resolvedPosts;
     } catch (error) {
         console.error(`Error fetching new posts from RSS feed ${rssLink}:`, error);
-        return []; // Возвращаем пустой массив, чтобы избежать дальнейших ошибок
+        return [];
     }
 };
 

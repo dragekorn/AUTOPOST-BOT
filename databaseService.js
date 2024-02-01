@@ -100,13 +100,13 @@ const getDetailedSubscriptions = async (userId) => {
 
       const subscriptions = await Subscription.aggregate([
           {
-              $match: { userId: userId.toString() } // Убедитесь, что userId в строковом формате
+              $match: { userId: userId.toString() }
           },
           {
               $group: {
                   _id: "$channelId",
                   rssFeeds: { $push: "$rssLink" },
-                  channelName: { $first: "$channelName" } // Используйте $first для получения имени канала
+                  channelName: { $first: "$channelName" }
               }
           },
           {
@@ -114,16 +114,15 @@ const getDetailedSubscriptions = async (userId) => {
                   channelId: "$_id",
                   _id: 0,
                   rssFeeds: 1,
-                  channelName: 1 // Включите channelName в проекцию
+                  channelName: 1
               }
           }
       ]);
 
-      // Преобразование данных в удобный формат
       const detailedSubscriptions = subscriptions.map(sub => ({
           channelId: sub.channelId,
           rssFeeds: sub.rssFeeds,
-          channelName: sub.channelName // Убедитесь, что channelName теперь передается
+          channelName: sub.channelName
       }));
 
       console.log(`Detailed subscriptions found:`, detailedSubscriptions);
