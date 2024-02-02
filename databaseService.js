@@ -5,6 +5,7 @@ mongoose.connect('mongodb://localhost:27017/RSStoPostBot')
   .catch(err => console.error('MongoDB connection error:', err));
 
   const subscriptionSchema = new mongoose.Schema({
+    _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
     userId: String,
     rssLink: String,
     channelId: String,
