@@ -37,7 +37,7 @@ subscribeScene.on('text', async (ctx) => {
                 const chat = await bot.telegram.getChat(channelId);
                 channelName = chat.title;
                 await saveSubscription(ctx.from.id, ctx.session.rssLink, channelId, channelName);
-                await ctx.reply(`Вы подписались на обновления: ${ctx.session.rssLink} для канала/группы: ${channelName} [ID: ${channelId}]`);
+                await ctx.reply(`Вы подписались на обновления RSS-ленты!\n\nRSS:${ctx.session.rssLink}\nПосты пойдут: ${channelName} [ID: ${channelId}]\n\nЧтобы посмотреть список активных RSS-лент, нажмите на команду /my_subscriptions\n\nЖелаем приятной работы с ботом!`);
                 clearTimeout(ctx.session.timeout);
                 ctx.scene.leave();
             } catch (error) {
@@ -136,8 +136,7 @@ bot.action(/delete_(.+)_([^]+)/, async (ctx) => {
         const detailedSubscriptions = await getDetailedSubscriptions(userId);
         
         if (detailedSubscriptions.length > 0) {
-            // Строим новое сообщение со списком подписок и кнопками для удаления
-            let messageText = '<b>Ваши действующие подписки:</b>\n';
+            let messageText = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n';
             detailedSubscriptions.forEach(sub => {
                 messageText += `Канал: ${sub.channelName} | RSS-лент: ${sub.rssFeeds.length}\n`;
                 sub.rssFeeds.forEach(feed => {
