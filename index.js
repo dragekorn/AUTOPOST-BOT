@@ -37,7 +37,7 @@ subscribeScene.on('text', async (ctx) => {
                 const chat = await bot.telegram.getChat(channelId);
                 channelName = chat.title;
                 await saveSubscription(ctx.from.id, ctx.session.rssLink, channelId, channelName);
-                await ctx.reply(`Вы подписались на обновления RSS-ленты!\n\nRSS:${ctx.session.rssLink}\nПосты пойдут: ${channelName} [ID: ${channelId}]\n\nЧтобы посмотреть список активных RSS-лент, нажмите на команду /my_subscriptions\n\nЖелаем приятной работы с ботом!`);
+                await ctx.reply(`Вы подписались на обновления RSS-ленты!\n\nRSS: ${ctx.session.rssLink}\nПосты пойдут в канал/группу: ${channelName} [ID: ${channelId}]\n\nЧтобы посмотреть список активных RSS-лент, нажмите на команду /my_subscriptions\n\nЖелаем приятной работы с ботом!`);
                 clearTimeout(ctx.session.timeout);
                 ctx.scene.leave();
             } catch (error) {
