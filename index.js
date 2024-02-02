@@ -3,7 +3,7 @@ const { Telegraf, Scenes, session } = require('telegraf');
 const fs = require('fs');
 const path = require('path');
 const rssService = require('./rssService');
-const { Subscription, saveSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
+const { User, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
@@ -63,64 +63,99 @@ bot.start((ctx) => {
 
 bot.command('subscribe', async (ctx) => {
     const userId = ctx.from.id.toString();
-    const user = await Subscription.findOne({ userId });
-  
+    const user = await findUser(userId);
+    
     if (!user || !user.licKeys) {
-      ctx.reply('Для использования этой команды необходимо авторизоваться. Пожалуйста, введите команду /auth <ваш_ключ>.');
-      return;
+        ctx.reply('Для использования этой команды необходимо авторизоваться. Пожалуйста, введите команду /auth <ваш_ключ>.');
+        return;
     }
-  
+    
     ctx.scene.enter('subscribeScene');
-  });
+});
   
 
 bot.command('auth', async (ctx) => {
     const userKey = ctx.message.text.split(' ')[1];
     const keys = require('./key.json');
-  
+    
     if (keys.includes(userKey)) {
-      const updatedKeys = keys.filter(key => key !== userKey);
-      fs.writeFileSync('key.json', JSON.stringify(updatedKeys));
-  
-      await Subscription.findOneAndUpdate({ userId: ctx.from.id }, { $set: { licKeys: userKey } }, { upsert: true });
-      ctx.reply('Вы успешно авторизованы. Теперь вы можете использовать команду /subscribe.');
+        const updatedKeys = keys.filter(key => key !== userKey);
+        fs.writeFileSync('key.json', JSON.stringify(updatedKeys));
+        
+        await addUserLicKey(ctx.from.id.toString(), userKey);
+        ctx.reply('Вы успешно авторизованы. Теперь вы можете использовать команду /subscribe.');
     } else {
-      ctx.reply('Неверный ключ. Пожалуйста, введите корректный ключ.');
+        ctx.reply('Неверный ключ. Пожалуйста, введите корректный ключ.');
     }
-  });
+});
   
 
-bot.command('my_subscriptions', async (ctx) => {
+  bot.command('my_subscriptions', async (ctx) => {
     console.log("Команда /my_subscriptions активирована");
-    const userId = ctx.from.id;
-    try {
-        console.log(`Fetching subscriptions for user: ${userId}`);
-        const detailedSubscriptions = await getDetailedSubscriptions(userId);
-        console.log(`Subscriptions fetched:`, detailedSubscriptions);
+    const userId = ctx.from.id.toString();
+    const detailedSubscriptions = await getDetailedSubscriptions(userId);
 
-        if (detailedSubscriptions.length === 0) {
-            ctx.reply('У вас пока нет подписок.😳\n\nЧтобы настроить RSS-подписку, используйте команду /subscribe');
-            return;
-        }
+    if (detailedSubscriptions.length === 0) {
+        ctx.reply('У вас пока нет подписок.😳\n\nЧтобы настроить RSS-подписку, используйте команду /subscribe');
+        return;
+    }
 
-        let message = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n';
-        const channelsCount = detailedSubscriptions.length;
-        const rssFeedsCount = detailedSubscriptions.reduce((acc, sub) => acc + sub.rssFeeds.length, 0);
+    let message = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n';
+    const inlineKeyboard = [];
 
-        message += `📜Каналы/группы: ${channelsCount}\n📜RSS-ленты: ${rssFeedsCount}\n➖➖➖\nПодробные сведения:\n`;
+    detailedSubscriptions.forEach((sub, index) => {
+        message += `📜 ${sub.channelName} | [ID: ${sub.channelId}]\n`;
 
-        detailedSubscriptions.forEach(sub => {
-            message += `В ${sub.channelName} | [ID: ${sub.channelId}] задействовано ${sub.rssFeeds.length} RSS-лент:\n`;
-            sub.rssFeeds.forEach(feed => {
-                message += `${feed}\n`;
-            });
-            message += '➖➖➖\n';
+        sub.rssFeeds.forEach(feed => {
+            message += `- ${feed}\n`;
+            inlineKeyboard.push([
+                { text: `Удалить ${feed}`, callback_data: `delete_${sub.channelId}_${feed}` }
+            ]);
         });
 
-        ctx.replyWithHTML(message);
-    } catch (err) {
-        console.error('Ошибка при получении подписок:', err);
-        ctx.reply('Произошла ошибка при попытке получить ваши подписки.');
+        message += '➖➖➖\n';
+    });
+
+    ctx.replyWithHTML(message, {
+        reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+});
+
+bot.action(/delete_(.+)_([^]+)/, async (ctx) => {
+    const [, channelId, rssLink] = ctx.match;
+    const userId = ctx.from.id.toString(); // Преобразование ID пользователя в строку для совместимости с базой данных
+
+    // Удаление подписки из базы данных
+    const success = await deleteSubscription(userId, rssLink, channelId);
+
+    if (success) {
+        // Пользователь получает уведомление об успешном удалении
+        await ctx.answerCbQuery(`Подписка на ${rssLink} удалена`);
+
+        // Получение обновленного списка подписок пользователя
+        const detailedSubscriptions = await getDetailedSubscriptions(userId);
+        
+        if (detailedSubscriptions.length > 0) {
+            // Строим новое сообщение со списком подписок и кнопками для удаления
+            let messageText = '<b>Ваши действующие подписки:</b>\n';
+            detailedSubscriptions.forEach(sub => {
+                messageText += `Канал: ${sub.channelName} | RSS-лент: ${sub.rssFeeds.length}\n`;
+                sub.rssFeeds.forEach(feed => {
+                    messageText += `- ${feed}\n`;
+                });
+            });
+
+            // Здесь можно добавить логику для создания новых inline кнопок, если требуется
+
+            // Обновляем сообщение пользователя новым списком подписок
+            await ctx.editMessageText(messageText, { parse_mode: 'HTML' }); // Не забудьте добавить inline-кнопки, если они нужны
+        } else {
+            // Если у пользователя не осталось подписок, отправляем сообщение об этом
+            await ctx.editMessageText('У вас больше нет активных подписок.', { parse_mode: 'HTML' });
+        }
+    } else {
+        // Если удалить подписку не удалось, сообщаем об этом пользователю
+        await ctx.answerCbQuery(`Не удалось удалить подписку на ${rssLink}`, true);
     }
 });
 

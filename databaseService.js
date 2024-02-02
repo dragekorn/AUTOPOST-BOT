@@ -1,16 +1,15 @@
 const mongoose = require('mongoose');
 
-mongoose.connect('mongodb://localhost:27017/telegramBot')
+mongoose.connect('mongodb://localhost:27017/RSStoPostBot')
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-const subscriptionSchema = new mongoose.Schema({
-  userId: String,
-  licKeys: { type: String, default: "" },
-  rssLink: String,
-  channelId: String,
-  channelName: String
-});
+  const subscriptionSchema = new mongoose.Schema({
+    userId: String,
+    rssLink: String,
+    channelId: String,
+    channelName: String
+  });
 
 const Subscription = mongoose.model('Subscription', subscriptionSchema);
 
@@ -19,9 +18,23 @@ const postSchema = new mongoose.Schema({
     postLinks: [String],
   });
   
-
 const Post = mongoose.model('Post', postSchema);
 
+const userSchema = new mongoose.Schema({
+  userId: { type: String, unique: true },
+  licKeys: { type: String, default: "" }
+});
+
+const User = mongoose.model('User', userSchema);
+
+
+const findUser = async (userId) => {
+  return await User.findOne({ userId });
+};
+
+const addUserLicKey = async (userId, licKey) => {
+  return await User.findOneAndUpdate({ userId }, { $set: { licKeys: licKey } }, { upsert: true, new: true });
+};
 
 const saveSubscription = async (userId, rssLink, channelId, channelName) => {
   try {
@@ -134,6 +147,24 @@ const getDetailedSubscriptions = async (userId) => {
   }
 };
 
+const deleteSubscription = async (userId, rssLink = null, channelId = null) => {
+  try {
+    const query = { userId };
+    if (rssLink) query.rssLink = rssLink;
+    if (channelId) query.channelId = channelId;
 
+    const result = await Subscription.deleteOne(query);
+    if (result.deletedCount === 0) {
+      console.log('Подписка не найдена или уже удалена.');
+      return false;
+    } else {
+      console.log('Подписка успешно удалена.');
+      return true;
+    }
+  } catch (error) {
+    console.error('Ошибка при удалении подписки:', error);
+    return false;
+  }
+};
 
-module.exports = { Subscription, saveSubscription, getUserSubscriptions, getLastSentPosts, saveSentPosts, getSubscriptions, getDetailedSubscriptions };
+module.exports = { User, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getUserSubscriptions, getLastSentPosts, saveSentPosts, getSubscriptions, getDetailedSubscriptions };
