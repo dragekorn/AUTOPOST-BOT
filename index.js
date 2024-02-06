@@ -3,7 +3,8 @@ const { Telegraf, Scenes, session } = require('telegraf');
 const fs = require('fs');
 const path = require('path');
 const rssService = require('./rssService');
-const { User, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
+const { processFile } = require('./moduleFiletoPost');
+const { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
@@ -16,7 +17,7 @@ subscribeScene.enter((ctx) => {
             ctx.reply('Вы не ввели ссылку на RSS-ленту. Чтобы попробовать заново, введите команду /subscribe');
             ctx.scene.leave();
         }
-    }, 60000);
+    }, 300000);
 });
 
 subscribeScene.on('text', async (ctx) => {
@@ -50,18 +51,88 @@ subscribeScene.on('text', async (ctx) => {
     }
 });
 
-const stage = new Scenes.Stage([subscribeScene]);
+const authScene = new Scenes.BaseScene('authScene');
+authScene.enter(async (ctx) => {
+    const userId = ctx.from.id.toString();
+    const user = await findUser(userId);
+
+    if (user && user.licKeys) {
+        ctx.reply(`Рады видеть Вас снова, ${user.username}! 😊\n\nВы уже успешно зарегистрировались в системе!\n\nПожалуйста, используйте кнопки ниже, чтобы начать работу с AUTOPOST BOT!\n\nЖелаем Вам приятной работы!`, {
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: 'RSS-постинг', callback_data: 'subscribe' },
+                        { text: 'Автопостинг из файла', callback_data: 'autopostfile' }
+                    ]
+                ]
+            }
+        });
+        ctx.scene.leave();
+    } else {
+        ctx.reply('Введите ваш лицензионный ключ.');
+    }
+});
+
+authScene.on('text', async (ctx) => {
+    const userKey = ctx.message.text;
+    const keys = require('./key.json');
+
+    if (keys.includes(userKey)) {
+        const updatedKeys = keys.filter(key => key !== userKey);
+        fs.writeFileSync('key.json', JSON.stringify(updatedKeys));
+
+        await addUserLicKey(ctx.from.id.toString(), userKey, ctx.from.username);
+        ctx.reply('Вы успешно авторизованы. Теперь вы можете использовать команду /subscribe.');
+        ctx.scene.leave();
+    } else {
+        ctx.reply('Неверный ключ. Пожалуйста, введите корректный ключ.');
+    }
+});
+
+const stage = new Scenes.Stage();
+stage.register(subscribeScene);
+stage.register(authScene);
 bot.use(session());
 bot.use(stage.middleware());
 
+
 bot.start((ctx) => {
-    const welcomeMessage = '<b>Добро пожаловать в бота RSSAutoParser&Post!</b>\n\nЕсли Вы уже приобрели подписку, пожалуйста, введите команду <code>/auth ВашКод</code>\n\nПосле успешной авторизации Вы сможете использовать команду /subscribe.\n\nЕсли Вы ещё не приобрели лицензионный ключ, обратитесь к @russelallen\n\n<b>Желаем приятной работы с ботом!</b>';
+    const welcomeMessage = '<b>Добро пожаловать в бота AUTOPOST BOT!</b>\n\nЕсли Вы уже приобрели подписку, пожалуйста, нажмите на кнопку <b>🔐 Авторизация</b>\n\nПосле успешной авторизации Вы сможете использовать бота для своей работы!\n\nЕсли Вы ещё не приобрели лицензионный ключ, пожалуйста, нажмите на кнопку <b>🛒 Купить ключ</b> и следуйте инструкции.\n\n<b>Желаем приятной работы с ботом!</b>';
     const imagePath = path.resolve(__dirname, 'logoAutoPostBot.png');
 
-    ctx.replyWithPhoto({ source: fs.createReadStream(imagePath) }, { caption: welcomeMessage, parse_mode: 'HTML' });
+    ctx.replyWithPhoto({ source: fs.createReadStream(imagePath) }, {
+        caption: welcomeMessage,
+        parse_mode: 'HTML',
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '🔐 Авторизация', callback_data: 'auth' },{ text: '🛒 Купить ключ', callback_data: 'buy' }],
+                
+            ],
+        },
+    });
 });
 
-bot.command('subscribe', async (ctx) => {
+
+
+bot.action('auth', async (ctx) => {
+    await ctx.scene.enter('authScene');
+});
+
+bot.action('buy', (ctx) => {
+    const buyMessage = '<b>Чтобы приобрести ключ, отсканируйте, пожалуйста, QR-код выше и совершите оплату</b>\n\n<u>После оплаты, Вам необходимо написать</u> @arhi_pro, предварительно подготовив скриншот об оплате.\n\nПосле проверки платежа, Вам выдадут лицензионный ключ, который Вы сможете использовать для аутентификации!\n\n<b>Приятной работы с ботом AUTOPOST BOT! 🤖</b> ';
+    const imagePath = path.resolve(__dirname, 'qr.jpg');
+    ctx.replyWithPhoto({ source: fs.createReadStream(imagePath) }, { 
+        caption: buyMessage, 
+        parse_mode: 'HTML',
+        reply_markup:{
+            inline_keyboard: [
+                [{ text: '🔐 Авторизация', callback_data: 'auth' }],
+            ],
+        },
+    });
+});
+
+bot.action('subscribe', async (ctx) => {
     const userId = ctx.from.id.toString();
     const user = await findUser(userId);
     
@@ -72,23 +143,43 @@ bot.command('subscribe', async (ctx) => {
     
     ctx.scene.enter('subscribeScene');
 });
-  
 
-bot.command('auth', async (ctx) => {
-    const userKey = ctx.message.text.split(' ')[1];
-    const keys = require('./key.json');
-    
-    if (keys.includes(userKey)) {
-        const updatedKeys = keys.filter(key => key !== userKey);
-        fs.writeFileSync('key.json', JSON.stringify(updatedKeys));
-        
-        await addUserLicKey(ctx.from.id.toString(), userKey);
-        ctx.reply('Вы успешно авторизованы. Теперь вы можете использовать команду /subscribe.');
+bot.action('autopostfile', async (ctx) => {
+    // Проверка на наличие лицензионного ключа у пользователя
+    const userId = ctx.from.id.toString();
+    const user = await findUser(userId);
+
+    if (!user || !user.licKeys) {
+        await ctx.reply('Для использования этой функции необходима авторизация.');
+        return;
+    }
+
+    ctx.reply('Пожалуйста, отправьте мне файл для автопостинга в формате XLSX, CSV или JSON.');
+    ctx.session.awaitingFile = true; // Метка ожидания файла
+});
+
+bot.on('document', async (ctx) => {
+    if (ctx.session && ctx.session.awaitingFile) {
+        try {
+            // Получаем информацию о файле
+            const fileId = ctx.message.document.file_id;
+            const fileLink = await ctx.telegram.getFileLink(fileId);
+
+            ctx.reply('Файл получен, начинаю обработку...');
+
+            await processFile(fileLink); // Обработка файла
+
+            ctx.reply('Файл успешно обработан и загружен в базу данных.');
+        } catch (error) {
+            console.error('Ошибка при обработке файла:', error);
+            ctx.reply('Произошла ошибка при обработке файла.');
+        }
+
+        delete ctx.session.awaitingFile; // Очищаем метку ожидания файла
     } else {
-        ctx.reply('Неверный ключ. Пожалуйста, введите корректный ключ.');
+        ctx.reply('Отправьте файл после активации команды автопостинга через /autopostfile');
     }
 });
-  
 
   bot.command('my_subscriptions', async (ctx) => {
     console.log("Команда /my_subscriptions активирована");

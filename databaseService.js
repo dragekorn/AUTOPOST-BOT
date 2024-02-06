@@ -23,18 +23,28 @@ const Post = mongoose.model('Post', postSchema);
 
 const userSchema = new mongoose.Schema({
   userId: { type: String, unique: true },
-  licKeys: { type: String, default: "" }
+  licKeys: { type: String, default: "" },
+  username: { type: String }
 });
 
 const User = mongoose.model('User', userSchema);
+
+const postFileSchema = new mongoose.Schema({
+  title: String,
+  text: String,
+  additionalInfo: mongoose.Schema.Types.Mixed,
+  createdAt: { type: Date, default: Date.now }
+});
+
+const PostFile = mongoose.model('PostFile', postFileSchema);
 
 
 const findUser = async (userId) => {
   return await User.findOne({ userId });
 };
 
-const addUserLicKey = async (userId, licKey) => {
-  return await User.findOneAndUpdate({ userId }, { $set: { licKeys: licKey } }, { upsert: true, new: true });
+const addUserLicKey = async (userId, licKey, username) => {
+  return await User.findOneAndUpdate({ userId }, { $set: { licKeys: licKey, username: username } }, { upsert: true, new: true });
 };
 
 const saveSubscription = async (userId, rssLink, channelId, channelName) => {
@@ -168,4 +178,4 @@ const deleteSubscription = async (userId, rssLink = null, channelId = null) => {
   }
 };
 
-module.exports = { User, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getUserSubscriptions, getLastSentPosts, saveSentPosts, getSubscriptions, getDetailedSubscriptions };
+module.exports = { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getUserSubscriptions, getLastSentPosts, saveSentPosts, getSubscriptions, getDetailedSubscriptions };
