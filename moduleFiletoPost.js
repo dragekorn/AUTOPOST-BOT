@@ -48,28 +48,33 @@ async function processXlsxFile(ctx, filePath) {
     let skippedPostsCount = 0; // Счетчик пропущенных постов
 
     for (const row of data) {
-      const existingPost = await PostFile.findOne({ title: row['Заголовок статьи'] });
+      // Формируем объект поста для проверки
+      const postQuery = {
+        title: row['Заголовок статьи'],
+        text: row['Текст статьи'],
+        additionalInfo: row['Подписи хэштеги'],
+        // Можете добавить другие поля, если это необходимо
+      };
+
+      // Ищем существующий пост с такими же данными
+      const existingPost = await PostFile.findOne(postQuery);
       if (existingPost) {
         skippedPostsCount++;
         continue; // Пропускаем добавление дублирующегося поста
       }
 
-      const postFormat = {
-        title: row['Заголовок статьи'],
-        text: row['Текст статьи'],
-        additionalInfo: row['Подписи хэштеги'],
-        datePost: row['Дата постинга'],
-      };
+      // Добавляем дату постинга к объекту, если пост уникален
+      postQuery.datePost = row['Дата постинга'];
 
-      await PostFile.create(postFormat);
+      await PostFile.create(postQuery);
       loadedPostsCount++;
     }
 
     const totalPostsCount = await getPostsCount(); // Общее количество постов в базе
     // Формирование сообщения с учетом количества пропущенных постов
-    let message = `Файл успешно обработан!\nНовых постов добавлено: <u>${loadedPostsCount}</u>`;
+    let message = `Файл успешно обработан, в базу было добавлено ${loadedPostsCount} новых постов.`;
     if (skippedPostsCount > 0) {
-      message += `\n\nПропущенных постов: <u>${skippedPostsCount}</u>.\n\n<i>Видимо какие-то из постов вы уже добавляли в базу. Пожалуйста, перепроверьте файл.</i>`;
+      message += `\n\nПропущенных постов: ${skippedPostsCount}.\nВидимо какие-то из постов вы уже добавляли в базу. Пожалуйста, перепроверьте файл.`;
     }
     successMessageWithQuestion(ctx, message, totalPostsCount);
   } catch (error) {
@@ -77,8 +82,6 @@ async function processXlsxFile(ctx, filePath) {
     successMessage(ctx, 'Произошла ошибка при обработке файла.');
   }
 }
-
-
 
 async function processFile(ctx, fileUrl) {
   const userId = ctx.from.id;
