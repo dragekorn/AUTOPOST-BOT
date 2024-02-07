@@ -25,4 +25,8 @@ async function successMessageWithQuestion(ctx, message, loadedPostsCount) {
     ]));
   }
 
-module.exports = { errorFileMessage, successMessage, successMessageWithQuestion };
+  function formatPostMessage(post) {
+    return `${post.title}\n\n${post.text}\n\n${post.additionalInfo}`;
+}
+
+module.exports = { formatPostMessage, errorFileMessage, successMessage, successMessageWithQuestion };

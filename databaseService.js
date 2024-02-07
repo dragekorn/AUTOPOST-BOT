@@ -35,7 +35,8 @@ const postFileSchema = new mongoose.Schema({
   text: String,
   additionalInfo: mongoose.Schema.Types.Mixed,
   datePost: { type: Date, default: Date.now },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  isSent: { type: Boolean, default: false }
 });
 
 const PostFile = mongoose.model('PostFile', postFileSchema);

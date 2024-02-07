@@ -3,7 +3,7 @@ const { initializeBot } = require('./botService');
 const { Scenes, session } = require('telegraf');
 const rssService = require('./rssService');
 const { processFile } = require('./moduleFiletoPost');
-const { successMessage, successMessageWithQuestion } = require('./utils');
+const { formatPostMessage, successMessage, successMessageWithQuestion } = require('./utils');
 const { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
 const fs = require('fs');
@@ -93,9 +93,30 @@ authScene.on('text', async (ctx) => {
     }
 });
 
+const autopostingScene = new Scenes.BaseScene('autopostingScene');
+
+autopostingScene.enter(async (ctx) => {
+    await ctx.reply("Пожалуйста, отправьте ID канала или группы для автопостинга.");
+});
+
+autopostingScene.on('text', async (ctx) => {
+    const chatId = ctx.message.text;
+    const userId = ctx.from.id.toString();
+    const hasAdminRights = await checkBotAdminRights(ctx, chatId);
+
+    if (hasAdminRights) {
+        await startAutoposting(ctx, chatId, userId);
+    } else {
+        await ctx.reply("У бота нет прав администратора в этом канале/группе.");
+    }
+
+    await ctx.scene.leave();
+});
+
 const stage = new Scenes.Stage();
 stage.register(subscribeScene);
 stage.register(authScene);
+stage.register(autopostingScene);
 bot.use(session());
 bot.use(stage.middleware());
 
@@ -220,40 +241,63 @@ bot.on('text', async (ctx) => {
     }
 });
 
+
 bot.action('start_autoposting', async (ctx) => {
-    // Логика для начала автопостинга
+    await ctx.scene.enter('autopostingScene');
+});
+
+
+// bot.on('text', async (ctx) => {
+//     const text = ctx.message.text;
+//     const userId = ctx.from.id.toString();
+  
+//     // Проверка, ожидается ли от пользователя ввод ID канала
+//     // Эту проверку нужно реализовать в зависимости от вашей логики состояний
+  
+//     // Логика сохранения введенного канала/группы
+//     await User.findOneAndUpdate({ userId }, { $addToSet: { channels: text } }, { new: true });
+//     ctx.reply('Канал/группа добавлен(а) для автопостинга.');
+//   });
+
+
+  bot.action('pause_autoposting', async (ctx) => {
+    // Предположим, что у вас есть функция, которая обновляет статус автопостинга в базе данных
     const userId = ctx.from.id.toString();
-    const user = await findUser(userId);
-  
-    let replyMessage = "Укажите группу или канал для автопостинга\n\nПожалуйста, не забывайте о том, что меня необходимо добавить в администраторы группы\канала для того, чтобы я имел возможность отправлять туда посты!";
-  
-    // Если у пользователя уже есть сохраненные каналы, предложить их для выбора
-    if (user && user.channels && user.channels.length > 0) {
-      replyMessage += "\n\nВаши предыдущие каналы/группы:\n" + user.channels.join('\n');
-    }
-  
-    await ctx.reply(replyMessage);
-  });
-  
-bot.action('upload_more', async (ctx) => {
-    // Логика для загрузки еще одного файла
-    await ctx.reply('Пожалуйста, отправьте мне файл для автопостинга в формате XLSX, CSV или JSON.');
-  });
+    
+    // Обновляем статус автопостинга на "приостановлен" для данного пользователя
+    // Это просто пример. Вам нужно адаптировать его под вашу логику и структуру базы данных
+    await updateUserAutopostingStatus(userId, { autopostingActive: false });
 
+    // Отправляем сообщение пользователю о приостановке автопостинга
+    await ctx.reply('Автопостинг приостановлен. Вы можете возобновить его в любое время, нажав "Продолжить автопостинг".', Markup.inlineKeyboard([
+        Markup.button.callback('Продолжить автопостинг', 'resume_autoposting')
+    ]));
+});
 
-bot.on('text', async (ctx) => {
-    const text = ctx.message.text;
+bot.action('cancel_autoposting', async (ctx) => {
     const userId = ctx.from.id.toString();
-  
-    // Проверка, ожидается ли от пользователя ввод ID канала
-    // Эту проверку нужно реализовать в зависимости от вашей логики состояний
-  
-    // Логика сохранения введенного канала/группы
-    await User.findOneAndUpdate({ userId }, { $addToSet: { channels: text } }, { new: true });
-    ctx.reply('Канал/группа добавлен(а) для автопостинга.');
-  });
+    
+    // Здесь логика для полной отмены автопостинга, например, удаление заданий из очереди автопостинга
+    await cancelUserAutoposting(userId);
 
-  
+    // Отправляем сообщение пользователю об отмене автопостинга
+    await ctx.reply('Автопостинг отменен. Вы можете запустить новую сессию автопостинга в любое время.', Markup.inlineKeyboard([
+        Markup.button.callback('Запустить автопостинг', 'start_autoposting'),
+        Markup.button.callback('Загрузить новые посты', 'upload_more')
+    ]));
+});
+
+// Дополнительно, функция для возобновления автопостинга, если вам это нужно
+bot.action('resume_autoposting', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    
+    // Возобновляем автопостинг для пользователя
+    await updateUserAutopostingStatus(userId, { autopostingActive: true });
+
+    // Сообщение о возобновлении автопостинга
+    await ctx.reply('Автопостинг возобновлен. Посты будут отправляться в соответствии с вашей настройкой.');
+});
+
 const checkAndSendUpdates = async () => {
     const subscriptions = await getSubscriptions();
 
@@ -290,6 +334,38 @@ const checkAndSendUpdates = async () => {
         }
     }
 };
+
+async function checkBotAdminRights(ctx, chatId) {
+    try {
+        const member = await ctx.telegram.getChatMember(chatId, ctx.botInfo.id);
+        // Проверяем, что бот является администратором и имеет права на отправку сообщений
+        if (member.status === 'administrator' && member.can_post_messages) {
+            return true; // Бот имеет права администратора и может отправлять сообщения
+        } else {
+            return false; // Бот не имеет достаточных прав
+        }
+    } catch (error) {
+        console.error("Ошибка при проверке прав администратора бота:", error);
+        return false; // В случае ошибки также считаем, что бот не имеет прав
+    }
+}
+
+async function startAutoposting(ctx, chatId, userId) {
+    // Получаем непосланные посты из базы данных
+    const posts = await PostFile.find({ isSent: false });
+
+    if (posts.length > 0) {
+        for (const post of posts) {
+            // Отправляем посты в канал
+            await ctx.telegram.sendMessage(chatId, formatPostMessage(post));
+            // Обновляем статус поста на "отправленный"
+            await PostFile.findByIdAndUpdate(post._id, { isSent: true });
+        }
+        await ctx.reply(`Автопостинг завершен. Отправлено ${posts.length} постов.`);
+    } else {
+        await ctx.reply("Нет постов для отправки.");
+    }
+}
 
 setInterval(checkAndSendUpdates, 60000);
 
