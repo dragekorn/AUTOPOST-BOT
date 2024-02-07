@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
 const { parse } = require('json2csv');
-const { successMessage, successMessageWithQuestion } = require('./utils');
+const { errorFileMessage, successMessage, successMessageWithQuestion } = require('./utils');
 
 const getPostsCount = async () => {
   return await PostFile.countDocuments();
@@ -104,7 +104,7 @@ async function processFile(ctx, fileUrl) {
           } else if (fileUrl.href.endsWith('.xlsx')) {
               await processXlsxFile(ctx, filePath);
           } else {
-              successMessage(ctx, '<b>⛔️⛔️⛔️ Ошибка ⛔️⛔️⛔️\n\nК сожалению я ещё не умею читать формат файлов, который Вы отправили.</b>\n\n<u>Попробуйте отправить XLSX, CSV или JSON</u>');
+              errorFileMessage(ctx, '<b>⛔️⛔️⛔️ Ошибка ⛔️⛔️⛔️\n\nК сожалению я ещё не умею читать формат файлов, который Вы отправили.</b>\n\n<u>Попробуйте отправить XLSX, CSV или JSON</u>');
               console.log('Unsupported file format');
               fs.unlinkSync(filePath);
               return;
