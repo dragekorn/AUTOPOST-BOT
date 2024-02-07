@@ -40,16 +40,20 @@ async function processCsvFile(filePath) {
 // Функция для обработки XLSX файла
 async function processXlsxFile(ctx, filePath) {
   try {
-    // Чтение данных из файла
     const workbook = xlsx.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
     const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-    // Счетчик успешно загруженных постов
     let loadedPostsCount = 0;
+    let skippedPostsCount = 0; // Счетчик пропущенных постов
 
-    // Итерация по всем строкам данных и формирование постов
     for (const row of data) {
+      const existingPost = await PostFile.findOne({ title: row['Заголовок статьи'] });
+      if (existingPost) {
+        skippedPostsCount++;
+        continue; // Пропускаем добавление дублирующегося поста
+      }
+
       const postFormat = {
         title: row['Заголовок статьи'],
         text: row['Текст статьи'],
@@ -57,20 +61,23 @@ async function processXlsxFile(ctx, filePath) {
         datePost: row['Дата постинга'],
       };
 
-      // Запись данных в базу данных и инкремент счетчика
       await PostFile.create(postFormat);
       loadedPostsCount++;
     }
-    const totalPostsCount = await getPostsCount();
-    // Отправка сообщения пользователю об успешной загрузке данных с указанием количества загруженных постов
-    // successMessage(ctx, `Файл успешно обработан.\n\nВ базу было загружено ${loadedPostsCount} постов для автопостинга.`);
-    successMessageWithQuestion(ctx, `Файл успешно обработан, в базу было добавлено ${loadedPostsCount} новых постов.`, totalPostsCount);
+
+    const totalPostsCount = await getPostsCount(); // Общее количество постов в базе
+    // Формирование сообщения с учетом количества пропущенных постов
+    let message = `Файл успешно обработан!\nНовых постов добавлено: <u>${loadedPostsCount}</u>`;
+    if (skippedPostsCount > 0) {
+      message += `\n\nПропущенных постов: <u>${skippedPostsCount}</u>.\n\n<i>Видимо какие-то из постов вы уже добавляли в базу. Пожалуйста, перепроверьте файл.</i>`;
+    }
+    successMessageWithQuestion(ctx, message, totalPostsCount);
   } catch (error) {
     console.error('Ошибка при обработке XLSX файла:', error);
-    // Отправляем сообщение об ошибке, если не удалось обработать файл
     successMessage(ctx, 'Произошла ошибка при обработке файла.');
   }
 }
+
 
 
 async function processFile(ctx, fileUrl) {
