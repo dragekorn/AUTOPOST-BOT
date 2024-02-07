@@ -1,12 +1,15 @@
 require('dotenv').config();
-const { Telegraf, Scenes, session } = require('telegraf');
-const fs = require('fs');
-const path = require('path');
+const { initializeBot } = require('./botService');
+const { Scenes, session } = require('telegraf');
 const rssService = require('./rssService');
 const { processFile } = require('./moduleFiletoPost');
 const { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+const fs = require('fs');
+const path = require('path');
+
+
+const bot = initializeBot(process.env.TELEGRAM_BOT_TOKEN);
 
 const subscribeScene = new Scenes.BaseScene('subscribeScene');
 subscribeScene.enter((ctx) => {
@@ -96,24 +99,6 @@ bot.use(session());
 bot.use(stage.middleware());
 
 
-bot.start((ctx) => {
-    const welcomeMessage = '<b>Добро пожаловать в бота AUTOPOST BOT!</b>\n\nЕсли Вы уже приобрели подписку, пожалуйста, нажмите на кнопку <b>🔐 Авторизация</b>\n\nПосле успешной авторизации Вы сможете использовать бота для своей работы!\n\nЕсли Вы ещё не приобрели лицензионный ключ, пожалуйста, нажмите на кнопку <b>🛒 Купить ключ</b> и следуйте инструкции.\n\n<b>Желаем приятной работы с ботом!</b>';
-    const imagePath = path.resolve(__dirname, 'logoAutoPostBot.png');
-
-    ctx.replyWithPhoto({ source: fs.createReadStream(imagePath) }, {
-        caption: welcomeMessage,
-        parse_mode: 'HTML',
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: '🔐 Авторизация', callback_data: 'auth' },{ text: '🛒 Купить ключ', callback_data: 'buy' }],
-                
-            ],
-        },
-    });
-});
-
-
-
 bot.action('auth', async (ctx) => {
     await ctx.scene.enter('authScene');
 });
@@ -162,14 +147,13 @@ bot.on('document', async (ctx) => {
     if (ctx.session && ctx.session.awaitingFile) {
         try {
             // Получаем информацию о файле
+            const chatId = ctx.chat.id;  // Исправлено здесь
             const fileId = ctx.message.document.file_id;
             const fileLink = await ctx.telegram.getFileLink(fileId);
 
             ctx.reply('Файл получен, начинаю обработку...');
 
-            await processFile(fileLink); // Обработка файла
-
-            ctx.reply('Файл успешно обработан и загружен в базу данных.');
+            await processFile(ctx, fileLink); // Обработка файла
         } catch (error) {
             console.error('Ошибка при обработке файла:', error);
             ctx.reply('Произошла ошибка при обработке файла.');
@@ -179,36 +163,6 @@ bot.on('document', async (ctx) => {
     } else {
         ctx.reply('Отправьте файл после активации команды автопостинга через /autopostfile');
     }
-});
-
-  bot.command('my_subscriptions', async (ctx) => {
-    console.log("Команда /my_subscriptions активирована");
-    const userId = ctx.from.id.toString();
-    const detailedSubscriptions = await getDetailedSubscriptions(userId);
-
-    if (detailedSubscriptions.length === 0) {
-        ctx.reply('У вас пока нет подписок.😳\n\nЧтобы настроить RSS-подписку, используйте команду /subscribe');
-        return;
-    }
-
-    let message = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n';
-    const inlineKeyboard = [];
-
-    detailedSubscriptions.forEach((sub, index) => {
-        message += `📜 ${sub.channelName} | [ID: ${sub.channelId}]\n`;
-
-        sub.rssFeeds.forEach(feed => {
-            message += `- ${feed}\n`;
-            inlineKeyboard.push([
-                { text: `Удалить ${feed}`, callback_data: `delete_${sub._id}` } // Используем `_id` подписки
-            ]);
-        });
-        message += '➖➖➖\n';
-    });
-
-    ctx.replyWithHTML(message, {
-        reply_markup: { inline_keyboard: inlineKeyboard }
-    });
 });
 
 bot.action(/delete_(.+)/, async (ctx) => {
@@ -304,5 +258,6 @@ const checkAndSendUpdates = async () => {
 
 setInterval(checkAndSendUpdates, 60000);
 
-bot.launch();
-console.log('Бот запущен...');
+bot.launch().then(() => {
+    console.log('Бот запущен...');
+});

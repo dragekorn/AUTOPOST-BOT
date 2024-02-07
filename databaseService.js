@@ -33,6 +33,7 @@ const postFileSchema = new mongoose.Schema({
   title: String,
   text: String,
   additionalInfo: mongoose.Schema.Types.Mixed,
+  datePost: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now }
 });
 

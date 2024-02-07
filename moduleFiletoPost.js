@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
 const { parse } = require('json2csv');
+const { successMessage } = require('./utils');
 
 // Функция для обработки JSON файла
 async function processJsonFile(filePath) {
@@ -33,29 +34,48 @@ async function processCsvFile(filePath) {
 }
 
 // Функция для обработки XLSX файла
-async function processXlsxFile(filePath) {
-    try {
-      const workbook = xlsx.readFile(filePath);
-      const sheetName = workbook.SheetNames[0];
-      const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
-  
-      // Обработка каждой строки данных
-      const processedData = data.map(row => {
-        // Ваша логика обработки строки
-        return row;
-      });
-  
-      // Далее сохранение в базу данных, как в предыдущем коде
-      for (const item of processedData) {
-        await PostFile.create(item);
-      }
-    } catch (error) {
-      console.error('Ошибка при обработке XLSX файла:', error);
-    }
-  }
+async function processXlsxFile(ctx, filePath) {
+  try {
+    // Чтение данных из файла
+    const workbook = xlsx.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
-async function processFile(fileUrl) {
-    try {
+    // Счетчик успешно загруженных постов
+    let loadedPostsCount = 0;
+
+    // Итерация по всем строкам данных и формирование постов
+    for (const row of data) {
+      const postFormat = {
+        title: row['Заголовок статьи'],
+        text: row['Текст статьи'],
+        additionalInfo: row['Подписи хэштеги'],
+        datePost: row['Дата постинга'],
+      };
+
+      // Запись данных в базу данных и инкремент счетчика
+      await PostFile.create(postFormat);
+      loadedPostsCount++;
+    }
+
+    // Отправка сообщения пользователю об успешной загрузке данных с указанием количества загруженных постов
+    successMessage(ctx, `Файл успешно обработан.\n\nВ базу было загружено ${loadedPostsCount} постов для автопостинга.`);
+  } catch (error) {
+    console.error('Ошибка при обработке XLSX файла:', error);
+    // Отправляем сообщение об ошибке, если не удалось обработать файл
+    successMessage(ctx, 'Произошла ошибка при обработке файла.');
+  }
+}
+
+
+async function processFile(ctx, fileUrl) {
+  const userId = ctx.from.id;
+  try {
+      console.log('ctx:', ctx);
+      if (!ctx.from) {
+          console.error('Отсутствует информация о пользователе');
+          return;
+      }
         const response = await axios({ url: fileUrl, method: 'GET', responseType: 'stream' });
         const filePath = path.join(__dirname, 'tempfile'); // Временное сохранение файла
         const writer = fs.createWriteStream(filePath);
@@ -73,14 +93,15 @@ async function processFile(fileUrl) {
         }
 
         if (fileUrl.href.endsWith('.json')) {
-            await processJsonFile(filePath);
-        } else if (fileUrl.href.endsWith('.csv')) {
-            await processCsvFile(filePath);
-        } else if (fileUrl.href.endsWith('.xlsx')) {
-            await processXlsxFile(filePath);
-        } else {
-            console.log('Unsupported file format');
-        }
+          await processJsonFile(filePath);
+          } else if (fileUrl.href.endsWith('.csv')) {
+              await processCsvFile(filePath);
+          } else if (fileUrl.href.endsWith('.xlsx')) {
+              await processXlsxFile(ctx, filePath);
+          } else {
+              console.log('Unsupported file format');
+              return;
+          }
 
         // Удаляем временный файл после обработки
         fs.unlinkSync(filePath);
