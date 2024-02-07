@@ -24,7 +24,8 @@ const Post = mongoose.model('Post', postSchema);
 const userSchema = new mongoose.Schema({
   userId: { type: String, unique: true },
   licKeys: { type: String, default: "" },
-  username: { type: String }
+  username: { type: String },
+  channels: [{ type: String }]
 });
 
 const User = mongoose.model('User', userSchema);

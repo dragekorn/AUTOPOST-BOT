@@ -6,7 +6,11 @@ const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
 const { parse } = require('json2csv');
-const { successMessage } = require('./utils');
+const { successMessage, successMessageWithQuestion } = require('./utils');
+
+const getPostsCount = async () => {
+  return await PostFile.countDocuments();
+};
 
 // Функция для обработки JSON файла
 async function processJsonFile(filePath) {
@@ -57,9 +61,10 @@ async function processXlsxFile(ctx, filePath) {
       await PostFile.create(postFormat);
       loadedPostsCount++;
     }
-
+    const totalPostsCount = await getPostsCount();
     // Отправка сообщения пользователю об успешной загрузке данных с указанием количества загруженных постов
-    successMessage(ctx, `Файл успешно обработан.\n\nВ базу было загружено ${loadedPostsCount} постов для автопостинга.`);
+    // successMessage(ctx, `Файл успешно обработан.\n\nВ базу было загружено ${loadedPostsCount} постов для автопостинга.`);
+    successMessageWithQuestion(ctx, `Файл успешно обработан, в базу было добавлено ${loadedPostsCount} новых постов.`, totalPostsCount);
   } catch (error) {
     console.error('Ошибка при обработке XLSX файла:', error);
     // Отправляем сообщение об ошибке, если не удалось обработать файл
@@ -99,7 +104,9 @@ async function processFile(ctx, fileUrl) {
           } else if (fileUrl.href.endsWith('.xlsx')) {
               await processXlsxFile(ctx, filePath);
           } else {
+              successMessage(ctx, '<b>⛔️⛔️⛔️ Ошибка ⛔️⛔️⛔️\n\nК сожалению я ещё не умею читать формат файлов, который Вы отправили.</b>\n\n<u>Попробуйте отправить XLSX, CSV или JSON</u>');
               console.log('Unsupported file format');
+              fs.unlinkSync(filePath);
               return;
           }
 

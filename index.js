@@ -3,6 +3,7 @@ const { initializeBot } = require('./botService');
 const { Scenes, session } = require('telegraf');
 const rssService = require('./rssService');
 const { processFile } = require('./moduleFiletoPost');
+const { successMessage, successMessageWithQuestion } = require('./utils');
 const { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
 const fs = require('fs');
@@ -219,6 +220,40 @@ bot.on('text', async (ctx) => {
     }
 });
 
+bot.action('start_autoposting', async (ctx) => {
+    // Логика для начала автопостинга
+    const userId = ctx.from.id.toString();
+    const user = await findUser(userId);
+  
+    let replyMessage = "Укажите группу или канал для автопостинга\n\nПожалуйста, не забывайте о том, что меня необходимо добавить в администраторы группы\канала для того, чтобы я имел возможность отправлять туда посты!";
+  
+    // Если у пользователя уже есть сохраненные каналы, предложить их для выбора
+    if (user && user.channels && user.channels.length > 0) {
+      replyMessage += "\n\nВаши предыдущие каналы/группы:\n" + user.channels.join('\n');
+    }
+  
+    await ctx.reply(replyMessage);
+  });
+  
+bot.action('upload_more', async (ctx) => {
+    // Логика для загрузки еще одного файла
+    await ctx.reply('Пожалуйста, отправьте мне файл для автопостинга в формате XLSX, CSV или JSON.');
+  });
+
+
+bot.on('text', async (ctx) => {
+    const text = ctx.message.text;
+    const userId = ctx.from.id.toString();
+  
+    // Проверка, ожидается ли от пользователя ввод ID канала
+    // Эту проверку нужно реализовать в зависимости от вашей логики состояний
+  
+    // Логика сохранения введенного канала/группы
+    await User.findOneAndUpdate({ userId }, { $addToSet: { channels: text } }, { new: true });
+    ctx.reply('Канал/группа добавлен(а) для автопостинга.');
+  });
+
+  
 const checkAndSendUpdates = async () => {
     const subscriptions = await getSubscriptions();
 
