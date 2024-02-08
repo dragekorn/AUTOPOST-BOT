@@ -161,31 +161,29 @@ bot.action('my_subscriptions', async (ctx) => {
 
     let message = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n\n';
     const inlineKeyboard = [];
-    
-    detailedSubscriptions.forEach(sub => {
-        message += `📜 <b>${sub.channelName}</b> | [<code>ID: ${sub.channelId}</code>]\n\n`;
 
-        sub.rssFeeds.forEach(feed => {
+    detailedSubscriptions.forEach((sub, index) => {
+        message += `📜 <b>${sub.channelName}</b>\n[ID: <code>${sub.channelId}</code>]\n`;
+
+        sub.rssFeeds.forEach((feed, feedIndex) => {
             const domainName = extractDomainName(feed); // Извлекаем имя домена из URL
-            message += `- <a href="${feed}">${domainName}</a>\n`;
-            inlineKeyboard.push([{ text: `Удалить ${domainName}`, callback_data: `delete_${sub.subId}` }]);
+            message += `🔗 <a href="${feed}">${domainName}</a>\n`;
+            inlineKeyboard.push([{ text: `Удалить ${domainName}`, callback_data: `delete_${sub.subId}_${feedIndex}` }]);
         });
 
-        if (detailedSubscriptions.length > 1) {
+        // Добавляем разделитель между подписками, если есть несколько подписок
+        if (index < detailedSubscriptions.length - 1) {
             message += '➖➖➖\n';
         }
     });
 
+    // Добавляем кнопку "Добавить RSS-линк" только один раз в конец всех кнопок
+    inlineKeyboard.push([{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }]);
+
     ctx.replyWithHTML(message, {
-        reply_markup: {
-            inline_keyboard: [
-                [{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }],
-            ]
-        }
+        reply_markup: { inline_keyboard: inlineKeyboard }
     });
 });
-
-
 
 bot.action('buy', (ctx) => {
     const buyMessage = '<b>Чтобы приобрести ключ, отсканируйте, пожалуйста, QR-код выше и совершите оплату</b>\n\n<u>После оплаты, Вам необходимо написать</u> @arhi_pro, предварительно подготовив скриншот об оплате.\n\nПосле проверки платежа, Вам выдадут лицензионный ключ, который Вы сможете использовать для аутентификации!\n\n<b>Приятной работы с ботом AUTOPOST BOT! 🤖</b> ';
@@ -262,17 +260,23 @@ bot.action(/delete_(.+)/, async (ctx) => {
         const detailedSubscriptions = await getDetailedSubscriptions(userId);
 
         // Формируем обновлённое сообщение и клавиатуру
-        let messageText = detailedSubscriptions.length > 0 ? '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n' : 'У вас больше нет активных подписок.';
+        let messageText = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n\n';
         const inlineKeyboard = [];
 
-        detailedSubscriptions.forEach(sub => {
-            messageText += `📜 ${sub.channelName} | [ID: ${sub.channelId}]\n`;
-            sub.rssFeeds.forEach(feed => {
-                messageText += `- ${feed}\n`;
-                inlineKeyboard.push([{ text: `Удалить ${feed}`, callback_data: `delete_${sub.subId}` }]);
+        detailedSubscriptions.forEach((sub, index) => {
+            messageText += `📜 <b>${sub.channelName}</b>\n[ID: <code>${sub.channelId}</code>]\n`;
+
+            sub.rssFeeds.forEach((feed, feedIndex) => {
+                const domainName = extractDomainName(feed); // Извлекаем имя домена из URL
+                messageText += `🔗 <a href="${feed}">${domainName}</a>\n`;
+                inlineKeyboard.push([{ text: `Удалить ${domainName}`, callback_data: `delete_${sub.subId}_${feedIndex}` }]);
             });
+
+        // Добавляем разделитель между подписками, если есть несколько подписок
+        if (index < detailedSubscriptions.length - 1) {
             messageText += '➖➖➖\n';
-        });
+        }
+    });
 
         inlineKeyboard.push([{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }]);
 
