@@ -251,34 +251,36 @@ bot.action(/delete_(.+)/, async (ctx) => {
       if (result) {
         await ctx.answerCbQuery('Подписка успешно удалена');
 
-            // Получаем обновлённый список подписок пользователя
-            const userId = ctx.from.id.toString(); // Убедитесь, что ID пользователя корректно преобразован в строку, если это необходимо
-            const detailedSubscriptions = await getDetailedSubscriptions(userId);
+        // Получаем обновлённый список подписок пользователя
+        const userId = ctx.from.id.toString();
+        const detailedSubscriptions = await getDetailedSubscriptions(userId);
 
-            // Проверяем, остались ли активные подписки
-            if (detailedSubscriptions.length > 0) {
-                let messageText = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n';
-                detailedSubscriptions.forEach(sub => {
-                    messageText += `📜 ${sub.channelName} | [ID: ${sub.channelId}]\n`;
-                    sub.rssFeeds.forEach(feed => {
-                        messageText += `- ${feed}\n`;
-                    });
-                    messageText += '➖➖➖\n';
-                });
-                // Отправляем пользователю обновлённый список подписок
-                await ctx.replyWithHTML(messageText);
-            } else {
-                // Если у пользователя не осталось подписок, сообщаем об этом
-                await ctx.reply('У вас больше нет активных подписок.');
-            }
-        } else {
-            await ctx.answerCbQuery('Не удалось найти подписку', true);
-          }
-        } catch (error) {
-          console.error('Ошибка при удалении подписки:', error);
-          await ctx.answerCbQuery('Произошла ошибка при удалении подписки', true);
-        }
-    });
+        // Формируем обновлённое сообщение и клавиатуру
+        let messageText = detailedSubscriptions.length > 0 ? '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n' : 'У вас больше нет активных подписок.';
+        const inlineKeyboard = [];
+
+        detailedSubscriptions.forEach(sub => {
+            messageText += `📜 ${sub.channelName} | [ID: ${sub.channelId}]\n`;
+            sub.rssFeeds.forEach(feed => {
+                messageText += `- ${feed}\n`;
+                inlineKeyboard.push([{ text: `Удалить ${feed}`, callback_data: `delete_${sub.subId}` }]);
+            });
+            messageText += '➖➖➖\n';
+        });
+
+        inlineKeyboard.push([{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }]);
+
+        // Обновляем сообщение
+        await ctx.editMessageText(messageText, { parse_mode: 'HTML', reply_markup: { inline_keyboard: inlineKeyboard } });
+      } else {
+        await ctx.answerCbQuery('Не удалось найти подписку', true);
+      }
+    } catch (error) {
+      console.error('Ошибка при удалении подписки:', error);
+      await ctx.answerCbQuery('Произошла ошибка при удалении подписки', true);
+    }
+});
+
 
 
 bot.on('text', async (ctx) => {
