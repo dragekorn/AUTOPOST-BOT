@@ -418,7 +418,7 @@ async function startAutoposting(ctx, chatId, userId) {
     if (posts.length > 0) {
         for (const post of posts) {
             // Отправляем посты в канал
-            await ctx.telegram.sendMessage(chatId, formatPostMessage(post));
+            await ctx.telegram.sendMessage(chatId, formatPostMessage(post), { parse_mode: 'HTML' });
             // Обновляем статус поста на "отправленный"
             await PostFile.findByIdAndUpdate(post._id, { isSent: true });
         }

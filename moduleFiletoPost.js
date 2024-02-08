@@ -48,23 +48,26 @@ async function processXlsxFile(ctx, filePath) {
     let skippedPostsCount = 0; // Счетчик пропущенных постов
 
     for (const row of data) {
-      // Формируем объект поста для проверки
-      const postQuery = {
-        text: row['Текст статьи'],
-        // Можете добавить другие поля, если это необходимо
+      // Изменяем запрос на проверку уникальности только по тексту статьи
+      const textQuery = {
+        text: row['Текст статьи']
       };
 
-      // Ищем существующий пост с такими же данными
-      const existingPost = await PostFile.findOne(postQuery);
+      // Ищем существующий пост только с таким же текстом
+      const existingPost = await PostFile.findOne(textQuery);
       if (existingPost) {
         skippedPostsCount++;
         continue; // Пропускаем добавление дублирующегося поста
       }
 
-      // Добавляем дату постинга к объекту, если пост уникален
-      postQuery.datePost = row['Дата постинга'];
+      // Создаем пост, если он уникален по тексту
+      const post = {
+        title: row['Заголовок статьи'],
+        text: row['Текст статьи'],
+        additionalInfo: row['Подписи хэштеги']
+      };
 
-      await PostFile.create(postQuery);
+      await PostFile.create(post);
       loadedPostsCount++;
     }
 
