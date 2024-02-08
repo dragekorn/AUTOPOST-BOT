@@ -9,7 +9,8 @@ mongoose.connect('mongodb://localhost:27017/RSStoPostBot')
     userId: String,
     rssLink: String,
     channelId: String,
-    channelName: String
+    channelName: String,
+    subId: { type: Number, required: true, unique: true }
   });
 
 const Subscription = mongoose.model('Subscription', subscriptionSchema);
@@ -58,7 +59,9 @@ const saveSubscription = async (userId, rssLink, channelId, channelName) => {
       return existingSubscription;
     }
 
-    const subscription = new Subscription({ userId, rssLink, channelId, channelName });
+    const subId = Date.now();
+
+    const subscription = new Subscription({ userId, rssLink, channelId, channelName, subId });
     await subscription.save();
     console.log('Новая подписка сохранена:', subscription);
     return subscription;
@@ -133,7 +136,9 @@ const getDetailedSubscriptions = async (userId) => {
               $group: {
                   _id: "$channelId",
                   rssFeeds: { $push: "$rssLink" },
-                  channelName: { $first: "$channelName" }
+                  channelName: { $first: "$channelName" },
+                  // Предполагаем, что subId уникален для каждой подписки и не меняется в группировке
+                  subId: { $first: "$subId" }
               }
           },
           {
@@ -141,7 +146,8 @@ const getDetailedSubscriptions = async (userId) => {
                   channelId: "$_id",
                   _id: 0,
                   rssFeeds: 1,
-                  channelName: 1
+                  channelName: 1,
+                  subId: 1 // Включаем subId в проекцию
               }
           }
       ]);
@@ -149,7 +155,8 @@ const getDetailedSubscriptions = async (userId) => {
       const detailedSubscriptions = subscriptions.map(sub => ({
           channelId: sub.channelId,
           rssFeeds: sub.rssFeeds,
-          channelName: sub.channelName
+          channelName: sub.channelName,
+          subId: sub.subId // Добавляем subId в возвращаемый объект
       }));
 
       console.log(`Detailed subscriptions found:`, detailedSubscriptions);
@@ -160,6 +167,7 @@ const getDetailedSubscriptions = async (userId) => {
       return [];
   }
 };
+
 
 const deleteSubscription = async (userId, rssLink = null, channelId = null) => {
   try {

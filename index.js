@@ -42,7 +42,15 @@ subscribeScene.on('text', async (ctx) => {
                 const chat = await bot.telegram.getChat(channelId);
                 channelName = chat.title;
                 await saveSubscription(ctx.from.id, ctx.session.rssLink, channelId, channelName);
-                await ctx.reply(`Вы подписались на обновления RSS-ленты!\n\nRSS: ${ctx.session.rssLink}\nПосты пойдут в канал/группу: ${channelName} [ID: ${channelId}]\n\nЧтобы посмотреть список активных RSS-лент, нажмите на команду /my_subscriptions\n\nЖелаем приятной работы с ботом!`);
+                await ctx.replyWithHTML(`<b>Вы подписались на обновления RSS-ленты!</b>\n\nRSS: ${ctx.session.rssLink}\nПосты пойдут в канал/группу: ${channelName} [ID: ${channelId}]\n\nЧтобы посмотреть список активных RSS-лент, нажмите на кнопку ниже.\n\n<b>Желаем приятной работы с ботом!</b>`, {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: '🗄 Мои RSS подписки', callback_data: 'my_subscriptions' }
+                            ]
+                        ]
+                    }
+                });
                 clearTimeout(ctx.session.timeout);
                 ctx.scene.leave();
             } catch (error) {
@@ -65,8 +73,11 @@ authScene.enter(async (ctx) => {
             reply_markup: {
                 inline_keyboard: [
                     [
-                        { text: 'RSS-постинг', callback_data: 'subscribe' },
-                        { text: 'Автопостинг из файла', callback_data: 'autopostfile' }
+                        { text: '⭐️ RSS-постинг', callback_data: 'subscribe' },
+                        { text: '📂 Автопостинг из файла', callback_data: 'autopostfile' }
+                    ],
+                    [
+                        { text: '🗄 Мои RSS подписки', callback_data: 'my_subscriptions' }
                     ]
                 ]
             }
@@ -124,6 +135,51 @@ bot.use(stage.middleware());
 bot.action('auth', async (ctx) => {
     await ctx.scene.enter('authScene');
 });
+
+bot.action('my_subscriptions', async (ctx) => {
+    console.log("Команда /my_subscriptions активирована");
+    const userId = ctx.from.id.toString();
+    const detailedSubscriptions = await getDetailedSubscriptions(userId);
+
+    if (detailedSubscriptions.length === 0) {
+        ctx.reply('У вас пока нет подписок.😳\n\nЧтобы настроить RSS-подписку, нажмите на кнопку ниже!', {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }],
+                ]
+            }
+        });
+        return;
+    }
+
+    let message = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n\n';
+    const inlineKeyboard = [];
+
+    detailedSubscriptions.forEach((sub) => {
+        message += `📜 <b>${sub.channelName}</b> | [<code>ID: ${sub.channelId}</code>]\n\n`;
+
+        sub.rssFeeds.forEach(feed => {
+            message += `- ${feed}\n`;
+            inlineKeyboard.push([{ text: `Удалить ${feed}`, callback_data: `delete_${sub.subId}` }]);
+        });
+
+        // Добавляем разделитель между подписками, если есть несколько подписок
+        if (detailedSubscriptions.length > 1) {
+            message += '➖➖➖\n';
+        }
+    });
+
+    // Добавляем кнопку "Добавить RSS-линк" в конец списка кнопок, если есть подписки
+    if (detailedSubscriptions.length > 0) {
+        inlineKeyboard.push([{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }]);
+    }
+
+    ctx.replyWithHTML(message, {
+        reply_markup: { inline_keyboard: inlineKeyboard }
+    });
+});
+
+
 
 bot.action('buy', (ctx) => {
     const buyMessage = '<b>Чтобы приобрести ключ, отсканируйте, пожалуйста, QR-код выше и совершите оплату</b>\n\n<u>После оплаты, Вам необходимо написать</u> @arhi_pro, предварительно подготовив скриншот об оплате.\n\nПосле проверки платежа, Вам выдадут лицензионный ключ, который Вы сможете использовать для аутентификации!\n\n<b>Приятной работы с ботом AUTOPOST BOT! 🤖</b> ';
@@ -188,11 +244,12 @@ bot.on('document', async (ctx) => {
 });
 
 bot.action(/delete_(.+)/, async (ctx) => {
-    const subscriptionId = ctx.match[1]; // Получаем ID подписки из callback_data
+    const subId = parseInt(ctx.match[1]); // Парсим subId из callback_data
+  
     try {
-        const result = await Subscription.findByIdAndDelete(subscriptionId); // Удаляем подписку по ID
-        if (result) {
-            await ctx.answerCbQuery(`Подписка успешно удалена`);
+      const result = await Subscription.findOneAndDelete({ subId: subId }); // Используем subId для поиска и удаления
+      if (result) {
+        await ctx.answerCbQuery('Подписка успешно удалена');
 
             // Получаем обновлённый список подписок пользователя
             const userId = ctx.from.id.toString(); // Убедитесь, что ID пользователя корректно преобразован в строку, если это необходимо
@@ -215,13 +272,13 @@ bot.action(/delete_(.+)/, async (ctx) => {
                 await ctx.reply('У вас больше нет активных подписок.');
             }
         } else {
-            await ctx.answerCbQuery(`Не удалось найти подписку`, true);
+            await ctx.answerCbQuery('Не удалось найти подписку', true);
+          }
+        } catch (error) {
+          console.error('Ошибка при удалении подписки:', error);
+          await ctx.answerCbQuery('Произошла ошибка при удалении подписки', true);
         }
-    } catch (error) {
-        console.error('Ошибка при удалении подписки:', error);
-        await ctx.answerCbQuery(`Произошла ошибка при удалении подписки`, true);
-    }
-});
+    });
 
 
 bot.on('text', async (ctx) => {
