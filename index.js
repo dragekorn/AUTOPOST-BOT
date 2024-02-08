@@ -1,9 +1,9 @@
 require('dotenv').config();
 const { initializeBot } = require('./botService');
-const { Scenes, session } = require('telegraf');
+const { Scenes, session, Markup } = require('telegraf');
 const rssService = require('./rssService');
 const { processFile } = require('./moduleFiletoPost');
-const { formatPostMessage, successMessage, successMessageWithQuestion } = require('./utils');
+const { extractDomainName, formatPostMessage, successMessage, successMessageWithQuestion } = require('./utils');
 const { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
 const fs = require('fs');
@@ -14,7 +14,9 @@ const bot = initializeBot(process.env.TELEGRAM_BOT_TOKEN);
 
 const subscribeScene = new Scenes.BaseScene('subscribeScene');
 subscribeScene.enter((ctx) => {
-    ctx.reply('Пожалуйста, отправьте RSS ссылку.');
+    ctx.reply('Пожалуйста, отправьте RSS ссылку.', Markup.inlineKeyboard([
+        Markup.button.callback('Отмена', 'cancel')
+    ]));
     ctx.session.awaitingInput = 'rssLink';
     ctx.session.timeout = setTimeout(() => {
         if (ctx.scene.current) {
@@ -61,6 +63,11 @@ subscribeScene.on('text', async (ctx) => {
             await ctx.reply('Введите, пожалуйста, корректный ID канала или группы. ID должен начинаться с -100 и содержать 13 цифр.');
         }
     }
+});
+
+subscribeScene.action('cancel', (ctx) => {
+    ctx.reply('Действие отменено. Возвращаемся в главное меню...');
+    ctx.scene.enter('authScene');
 });
 
 const authScene = new Scenes.BaseScene('authScene');
@@ -153,29 +160,24 @@ bot.action('my_subscriptions', async (ctx) => {
     }
 
     let message = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n\n';
-    const inlineKeyboard = [];
-
-    detailedSubscriptions.forEach((sub) => {
+    
+    detailedSubscriptions.forEach(sub => {
         message += `📜 <b>${sub.channelName}</b> | [<code>ID: ${sub.channelId}</code>]\n\n`;
 
         sub.rssFeeds.forEach(feed => {
-            message += `- ${feed}\n`;
-            inlineKeyboard.push([{ text: `Удалить ${feed}`, callback_data: `delete_${sub.subId}` }]);
+            const domainName = extractDomainName(feed); // Извлекаем имя домена из URL
+            message += `- <a href="${feed}">${domainName}</a>\n`;
         });
 
-        // Добавляем разделитель между подписками, если есть несколько подписок
-        if (detailedSubscriptions.length > 1) {
-            message += '➖➖➖\n';
-        }
+        message += '➖➖➖\n';
     });
 
-    // Добавляем кнопку "Добавить RSS-линк" в конец списка кнопок, если есть подписки
-    if (detailedSubscriptions.length > 0) {
-        inlineKeyboard.push([{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }]);
-    }
-
     ctx.replyWithHTML(message, {
-        reply_markup: { inline_keyboard: inlineKeyboard }
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }],
+            ]
+        }
     });
 });
 

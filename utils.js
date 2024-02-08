@@ -29,4 +29,9 @@ async function successMessageWithQuestion(ctx, message, loadedPostsCount) {
     return `${post.title}\n\n${post.text}\n\n${post.additionalInfo}`;
 }
 
-module.exports = { formatPostMessage, errorFileMessage, successMessage, successMessageWithQuestion };
+function extractDomainName(url) {
+  const matches = url.match(/^https?:\/\/([^/?#]+)(?:[/?#]|$)/i);
+  return matches && matches[1] ? matches[1] : '';
+}
+
+module.exports = { extractDomainName, formatPostMessage, errorFileMessage, successMessage, successMessageWithQuestion };
