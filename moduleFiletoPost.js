@@ -50,9 +50,7 @@ async function processXlsxFile(ctx, filePath) {
     for (const row of data) {
       // Формируем объект поста для проверки
       const postQuery = {
-        title: row['Заголовок статьи'],
         text: row['Текст статьи'],
-        additionalInfo: row['Подписи хэштеги'],
         // Можете добавить другие поля, если это необходимо
       };
 
