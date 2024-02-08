@@ -167,9 +167,12 @@ bot.action('my_subscriptions', async (ctx) => {
         sub.rssFeeds.forEach(feed => {
             const domainName = extractDomainName(feed); // Извлекаем имя домена из URL
             message += `- <a href="${feed}">${domainName}</a>\n`;
+            inlineKeyboard.push([{ text: `Удалить ${domainName}`, callback_data: `delete_${sub.subId}` }]);
         });
 
-        message += '➖➖➖\n';
+        if (detailedSubscriptions.length > 1) {
+            message += '➖➖➖\n';
+        }
     });
 
     ctx.replyWithHTML(message, {
