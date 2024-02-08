@@ -247,24 +247,9 @@ bot.action('start_autoposting', async (ctx) => {
 });
 
 
-// bot.on('text', async (ctx) => {
-//     const text = ctx.message.text;
-//     const userId = ctx.from.id.toString();
-  
-//     // Проверка, ожидается ли от пользователя ввод ID канала
-//     // Эту проверку нужно реализовать в зависимости от вашей логики состояний
-  
-//     // Логика сохранения введенного канала/группы
-//     await User.findOneAndUpdate({ userId }, { $addToSet: { channels: text } }, { new: true });
-//     ctx.reply('Канал/группа добавлен(а) для автопостинга.');
-//   });
-
-
-  bot.action('pause_autoposting', async (ctx) => {
-    // Предположим, что у вас есть функция, которая обновляет статус автопостинга в базе данных
+bot.action('pause_autoposting', async (ctx) => {
     const userId = ctx.from.id.toString();
     
-    // Обновляем статус автопостинга на "приостановлен" для данного пользователя
     // Это просто пример. Вам нужно адаптировать его под вашу логику и структуру базы данных
     await updateUserAutopostingStatus(userId, { autopostingActive: false });
 
@@ -283,7 +268,7 @@ bot.action('cancel_autoposting', async (ctx) => {
     // Отправляем сообщение пользователю об отмене автопостинга
     await ctx.reply('Автопостинг отменен. Вы можете запустить новую сессию автопостинга в любое время.', Markup.inlineKeyboard([
         Markup.button.callback('Запустить автопостинг', 'start_autoposting'),
-        Markup.button.callback('Загрузить новые посты', 'upload_more')
+        Markup.button.callback('Загрузить новые посты', 'autopostfile')
     ]));
 });
 
