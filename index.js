@@ -160,6 +160,7 @@ bot.action('my_subscriptions', async (ctx) => {
     }
 
     let message = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n\n';
+    const inlineKeyboard = [];
     
     detailedSubscriptions.forEach(sub => {
         message += `📜 <b>${sub.channelName}</b> | [<code>ID: ${sub.channelId}</code>]\n\n`;
