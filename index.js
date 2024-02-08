@@ -143,6 +143,11 @@ bot.action('auth', async (ctx) => {
     await ctx.scene.enter('authScene');
 });
 
+bot.action('cancel', (ctx) => {
+    ctx.reply('Действие отменено. Возвращаемся в главное меню...');
+    ctx.scene.enter('authScene');
+});
+
 bot.action('my_subscriptions', async (ctx) => {
     console.log("Команда /my_subscriptions активирована");
     const userId = ctx.from.id.toString();
@@ -221,7 +226,9 @@ bot.action('autopostfile', async (ctx) => {
         return;
     }
 
-    ctx.reply('Пожалуйста, отправьте мне файл для автопостинга в формате XLSX, CSV или JSON.');
+    ctx.replyWithHTML('Пожалуйста, отправьте мне файл для автопостинга в формате XLSX, CSV или JSON.\n\nОбязательно убедитесь, что структура Вашего файла следующая:\n<b>Заголовок статьи</b>\n<b>Текст статьи</b>\n<b>Подписи хэштеги</b>\n\nЕсли у Вас такая структура, отправляйте файл. Если нет, пожалуйста, приведите Ваш файл в должный вид.', Markup.inlineKeyboard([
+        Markup.button.callback('Отмена', 'cancel')
+    ]));
     ctx.session.awaitingFile = true; // Метка ожидания файла
 });
 
