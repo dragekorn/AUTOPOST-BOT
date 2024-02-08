@@ -125,7 +125,7 @@ autopostingScene.on('text', async (ctx) => {
     if (hasAdminRights) {
         await startAutoposting(ctx, chatId, userId);
     } else {
-        await ctx.reply("У бота нет прав администратора в этом канале/группе.");
+        await ctx.reply("У бота нет прав администратора в этом канале/группе.\nПожалуйста, добавьте бота в группу и сделайте его администратором. После чего, снова отправьте запрос.");
     }
 
     await ctx.scene.leave();
