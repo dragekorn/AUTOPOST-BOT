@@ -26,9 +26,13 @@ async function successMessageWithQuestion(ctx, message, loadedPostsCount) {
     ]));
   }
 
-  function formatPostMessage(post) {
+  function formatPostMessage(post, template) {
     if (post && post.data && Array.isArray(post.data)) {
-        return post.data.join('\n');
+        return template.replace(/{(\d+)}/g, function(match, number) { 
+            return typeof post.data[number] != 'undefined'
+              ? post.data[number]
+              : match;
+        });
     } else {
         console.error('Invalid post data:', post);
         return 'Ошибка: данные поста недоступны или некорректны.';

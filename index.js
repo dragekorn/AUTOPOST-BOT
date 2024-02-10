@@ -630,12 +630,16 @@ async function startAutoposting(ctx, chatId, userId, projectId, delay) {
         await ctx.telegram.editMessageText(ctx.chat.id, statusMessage.message_id, null, `<b>Автопостинг запущен.</b>\n\nСообщений отправлено: ${sentPosts}\nСообщений в очереди: ${remainingPosts}\n\nПримерное ожидание завершения автопостинга: ${estimatedTimeFormatted}\n\nОжидайте пожалуйста.`, { parse_mode: 'HTML' });
     };
 
+    const messageTemplate = '<b>Название фирмы</b>: {0}\n<b>ИНН</b>: {1}\n...';
+    
     // Запускаем автопостинг с задержкой и обновляем статус
     for (let i = 0; i < totalPosts; i++) {
         const post = postsToSend[i];
         setTimeout(async () => {
             if (!post.isSent) {
-                await safeSendMessage(ctx, chatId, formatPostMessage(post), { parse_mode: 'HTML' });
+                // Обновляем вызов функции для использования шаблона
+                const formattedMessage = formatPostMessage(post, messageTemplate);
+                await safeSendMessage(ctx, chatId, formattedMessage, { parse_mode: 'HTML' });
                 post.isSent = true;
                 await post.save();
                 sentCount++;
