@@ -182,7 +182,13 @@ selfTemplateScene.enter((ctx) => {
 
 selfTemplateScene.on('text', async (ctx) => {
     const projectName = ctx.message.text;
-    const userId = ctx.from.id;
+    const userId = ctx.from.id.toString();
+
+     const existingProject = await UserProject.findOne({ projectName: projectName, userID: userId });
+     if (existingProject) {
+         await ctx.reply('Проект с таким названием уже существует. Пожалуйста, выберите другое название.');
+         return;
+     }
 
     try {
         const newProject = await createNewProject(userId, projectName, []);
@@ -388,27 +394,27 @@ bot.action('autopostfile', async (ctx) => {
     ctx.session.awaitingFile = true;
 });
 
-bot.on('document', async (ctx) => {
-    if (ctx.session && ctx.session.awaitingFile) {
-        try {
+// bot.on('document', async (ctx) => {
+//     if (ctx.session && ctx.session.awaitingFile) {
+//         try {
 
-            const chatId = ctx.chat.id;
-            const fileId = ctx.message.document.file_id;
-            const fileLink = await ctx.telegram.getFileLink(fileId);
+//             const chatId = ctx.chat.id;
+//             const fileId = ctx.message.document.file_id;
+//             const fileLink = await ctx.telegram.getFileLink(fileId);
 
-            ctx.reply('Файл получен, начинаю обработку...');
+//             ctx.reply('Файл получен, начинаю обработку...');
 
-            await processFile(ctx, fileLink);
-        } catch (error) {
-            console.error('Ошибка при обработке файла:', error);
-            ctx.reply('Произошла ошибка при обработке файла.');
-        }
+//             await processFile(ctx, fileLink);
+//         } catch (error) {
+//             console.error('Ошибка при обработке файла:', error);
+//             ctx.reply('Произошла ошибка при обработке файла.');
+//         }
 
-        delete ctx.session.awaitingFile;
-    } else {
-        ctx.reply('Отправьте файл после активации команды автопостинга через /autopostfile');
-    }
-});
+//         delete ctx.session.awaitingFile;
+//     } else {
+//         ctx.reply('Отправьте файл после активации команды автопостинга через /autopostfile');
+//     }
+// });
 
 bot.action(/delete_(.+)/, async (ctx) => {
     const subId = parseInt(ctx.match[1]);

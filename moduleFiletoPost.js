@@ -69,7 +69,7 @@ async function processXlsxFile(ctx, filePath, projectId, userId) {
     }
 
     // Отправляем сообщение о успешной загрузке данных
-    successMessageWithQuestion(ctx, `Данные успешно загружены в проект. Всего загружено ${posts.length} постов.`);
+    successMessageWithQuestion(ctx, `Данные успешно загружены в проект. Всего загружено ${posts.length} постов.`, posts.length);
   } catch (error) {
     console.error('Ошибка при обработке XLSX файла:', error);
     ctx.reply('Произошла ошибка при обработке файла.');
