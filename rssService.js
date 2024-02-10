@@ -55,25 +55,34 @@ const { getLastSentPosts, saveSentPosts } = require('./databaseService');
 //         return null;
 //     }
 // };
+function delay(timeInMs) {
+    return new Promise(resolve => setTimeout(resolve, timeInMs));
+}
 
 const getNewRSSPosts = async (rssLink, channelId) => {
     try {
         const feed = await parser.parseURL(rssLink);
         const lastSentPosts = await getLastSentPosts(channelId);
 
-        const newPostsPromises = feed.items.filter(item => !lastSentPosts.includes(item.link)).map(async (item) => {
-            let content = item.contentSnippet || item.content;
-            content = content.replace("Читать далее", "");
-            const hashtag = item.creator ? `#${item.creator.replace(/\s+/g, '_')}` : '';
-            const formattedPost = `<b>${item.title}</b>\n\n${content}\n\n<a href="${item.link}">Источник</a> ${hashtag}`;
-            return {
-                item: item,
-                formattedPost: formattedPost,
-                imageStream: null, // Изображения временно не обрабатываются
-            };
-        });
+        let resolvedPosts = [];
+        for (const item of feed.items) {
+            if (!lastSentPosts.includes(item.link)) {
+                let content = item.contentSnippet || item.content;
+                content = content.replace("Читать далее", "");
+                const hashtag = item.creator ? `#${item.creator.replace(/\s+/g, '_')}` : '';
+                const formattedPost = `<b>${item.title}</b>\n\n${content}\n\n<a href="${item.link}">Источник</a> ${hashtag}`;
 
-        const resolvedPosts = (await Promise.all(newPostsPromises)).filter(post => post != null);
+                resolvedPosts.push({
+                    item: item,
+                    formattedPost: formattedPost,
+                    imageStream: null, // Изображения временно не обрабатываются
+                });
+
+                // Добавляем задержку 1 минуту (60000 мс) перед обработкой следующего поста
+                await delay(60000);
+            }
+        }
+
         await saveSentPosts(channelId, resolvedPosts.map(post => post.item.link));
         return resolvedPosts;
     } catch (error) {

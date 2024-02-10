@@ -19,10 +19,10 @@ async function successMessageWithQuestion(ctx, message, loadedPostsCount) {
       [
         Markup.button.callback('▶️ Начать автопостинг', 'start_autoposting'),
         Markup.button.callback('🔄 Загрузить ещё', 'autopostfile')
-      ],
-      [
-        Markup.button.callback('⚙️ Установить шаблон для постов', 'set_template')
       ]
+      // [
+      //   Markup.button.callback('⚙️ Установить шаблон для постов', 'set_template')
+      // ]
     ]));
   }
 

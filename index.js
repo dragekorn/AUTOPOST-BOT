@@ -574,6 +574,22 @@ async function checkBotAdminRights(ctx, chatId) {
     }
 }
 
+async function safeSendMessage(ctx, chatId, message, options) {
+    try {
+        await ctx.telegram.sendMessage(chatId, message, options);
+    } catch (error) {
+        if (error.code === 429) { // Проверка на ошибку ограничения скорости
+            const retryAfter = error.parameters.retry_after;
+            console.log(`Rate limit hit, waiting for ${retryAfter} seconds`);
+            await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+            // Повторная отправка сообщения после задержки
+            await ctx.telegram.sendMessage(chatId, message, options);
+        } else {
+            throw error; // Если ошибка не связана с ограничением скорости, перебрасываем её дальше
+        }
+    }
+}
+
 async function startAutoposting(ctx, chatId, userId, projectId, delay) {
     const projectExists = await UserProject.exists({ _id: projectId, userID: userId });
     if (!projectExists) {
@@ -586,15 +602,12 @@ async function startAutoposting(ctx, chatId, userId, projectId, delay) {
     let sentCount = 0;
     for (const post of postsToSend) {
         if (!post.isSent) {
-            try {
-                await ctx.telegram.sendMessage(chatId, formatPostMessage(post), { parse_mode: 'HTML' });
-                post.isSent = true;
-                await post.save();
-                sentCount++;
-                await new Promise(resolve => setTimeout(resolve, delay));
-            } catch (error) {
-                console.error("Error sending post:", error);
-            }
+            await safeSendMessage(ctx, chatId, formatPostMessage(post), { parse_mode: 'HTML' });
+            post.isSent = true;
+            await post.save();
+            sentCount++;
+            // Ждем указанную задержку перед отправкой следующего сообщения
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
 
