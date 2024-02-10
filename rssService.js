@@ -55,9 +55,6 @@ const { getLastSentPosts, saveSentPosts } = require('./databaseService');
 //         return null;
 //     }
 // };
-function delay(timeInMs) {
-    return new Promise(resolve => setTimeout(resolve, timeInMs));
-}
 
 const getNewRSSPosts = async (rssLink, channelId) => {
     try {
@@ -78,8 +75,6 @@ const getNewRSSPosts = async (rssLink, channelId) => {
                     imageStream: null, // Изображения временно не обрабатываются
                 });
 
-                // Добавляем задержку 1 минуту (60000 мс) перед обработкой следующего поста
-                await delay(60000);
             }
         }
 
