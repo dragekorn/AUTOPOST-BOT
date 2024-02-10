@@ -1,5 +1,6 @@
 // utils.js
 const { Markup } = require('telegraf');
+const { User, UserProject, createNewProject, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
 const successMessage = async (ctx, message) => {
     await ctx.replyWithHTML(message);
@@ -26,7 +27,12 @@ async function successMessageWithQuestion(ctx, message, loadedPostsCount) {
   }
 
   function formatPostMessage(post) {
-    return `${post.title}\n\n${post.text}\n\n${post.additionalInfo}`;
+    if (post && post.data && Array.isArray(post.data)) {
+        return post.data.join('\n');
+    } else {
+        console.error('Invalid post data:', post);
+        return 'Ошибка: данные поста недоступны или некорректны.';
+    }
 }
 
 function extractDomainName(url) {

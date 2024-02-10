@@ -129,21 +129,48 @@ authScene.on('text', async (ctx) => {
 const autopostingScene = new Scenes.BaseScene('autopostingScene');
 
 autopostingScene.enter(async (ctx) => {
-    await ctx.reply("Пожалуйста, отправьте ID канала или группы для автопостинга.");
+    await ctx.reply("Пожалуйста, введите название вашего проекта для автопостинга.");
 });
 
-autopostingScene.on('text', async (ctx) => {
+autopostingScene.on('text', async (ctx, next) => {
     const chatId = ctx.message.text;
-    const userId = ctx.from.id.toString();
-    const hasAdminRights = await checkBotAdminRights(ctx, chatId);
+    // Проверяем, ввели ли ID канала или название проекта
+    if (/^-100\d+$/.test(ctx.message.text)) {
+        // Проверяем, выбран ли проект
+        console.log('Session data:', ctx.session);
+        if (checkReadyForAutoposting(ctx)) {
+            const chatId = ctx.message.text;
+            const userId = ctx.from.id.toString();
+            const hasAdminRights = await checkBotAdminRights(ctx, chatId);
 
-    if (hasAdminRights) {
-        await startAutoposting(ctx, chatId, userId);
+            if (hasAdminRights) {
+                await startAutoposting(ctx, chatId, ctx.session.userId, ctx.session.projectId, ctx.session.delay);
+                ctx.session.projectId = null; // Очищаем projectId из сессии после запуска автопостинга
+                ctx.session.delay = null; // Очищаем выбранную задержку из сессии
+            } else {
+                await ctx.reply("У бота нет прав администратора в этом канале/группе.\nПожалуйста, добавьте бота в группу и сделайте его администратором. После чего, снова отправьте запрос.");
+            }
+            await ctx.scene.leave(); // Выход из сцены после запуска или ошибки автопостинга
+        } else {
+            await ctx.reply("Пожалуйста, сначала выберите проект и задержку для автопостинга.");
+        }
     } else {
-        await ctx.reply("У бота нет прав администратора в этом канале/группе.\nПожалуйста, добавьте бота в группу и сделайте его администратором. После чего, снова отправьте запрос.");
+        // Поиск проекта по имени
+        const projectName = ctx.message.text;
+        const project = await UserProject.findOne({ projectName: projectName, userID: ctx.from.id.toString() });
+        if (project) {
+            ctx.session.projectId = project._id.toString();
+            await ctx.reply("Проект найден. Теперь выберите интервал задержки между постами.", Markup.inlineKeyboard([
+                Markup.button.callback('5 секунд', 'delay_5000'),
+                Markup.button.callback('10 секунд', 'delay_10000'),
+                Markup.button.callback('1 минута', 'delay_60000'),
+                Markup.button.callback('10 минут', 'delay_600000')
+            ]));
+        } else {
+            await ctx.reply(`Проект "${projectName}" не найден. Попробуйте еще раз или создайте новый проект.`);
+            // Здесь можно добавить логику для создания нового проекта
+        }
     }
-
-    await ctx.scene.leave();
 });
 
 //сцена автопостинга с созданием своего проекта с собственным шаблоном
@@ -159,7 +186,7 @@ selfTemplateScene.on('text', async (ctx) => {
 
     try {
         const newProject = await createNewProject(userId, projectName, []);
-        ctx.session.projectId = newProject._id; // Сохраняем ID проекта для дальнейшего использования
+        ctx.session.projectId = newProject._id;
         ctx.reply('Проект создан успешно. Теперь, пожалуйста, отправьте мне файл с данными для постов.');
     } catch (error) {
         console.error('Ошибка при создании проекта:', error);
@@ -188,7 +215,7 @@ selfTemplateScene.on('document', async (ctx) => {
     try {
         const projectPosts = await processFile(ctx, fileLink); // Эта функция должна быть адаптирована для возврата данных постов
         ctx.session.projectPosts = projectPosts; // Сохраняем посты в сессии для использования в следующем шаге
-        ctx.reply('Файл успешно обработан. Теперь введите шаблон для сохранения постов в базу данных, используя поля из файла.');
+        // ctx.reply('Файл успешно обработан. Теперь введите шаблон для сохранения постов в базу данных, используя поля из файла.');
     } catch (error) {
         console.error('Ошибка при обработке файла:', error);
         ctx.reply('Произошла ошибка при обработке файла. Пожалуйста, попробуйте снова.');
@@ -196,36 +223,36 @@ selfTemplateScene.on('document', async (ctx) => {
 });
 
 // Шаг 4: Получение шаблона и запись постов в базу данных
-selfTemplateScene.on('text', async (ctx, next) => {
-    if (ctx.message.text.startsWith('/')) {
-        return next();
-    }
+// selfTemplateScene.on('text', async (ctx, next) => {
+//     if (ctx.message.text.startsWith('/')) {
+//         return next();
+//     }
 
-    const projectId = ctx.session.projectId;
-    const projectPosts = ctx.session.projectPosts;
-    if (!projectId || !projectPosts) {
-        ctx.reply('Произошла ошибка: отсутствуют данные проекта или постов. Пожалуйста, начните процесс заново.', {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: 'Начать заново', callback_data: 'selfTemplateScene' }],
-                ]
-            }
-        });
-        ctx.scene.leave();
-        return;
-    }
+//     const projectId = ctx.session.projectId;
+//     const projectPosts = ctx.session.projectPosts;
+//     if (!projectId || !projectPosts) {
+//         ctx.reply('Произошла ошибка: отсутствуют данные проекта или постов. Пожалуйста, начните процесс заново.', {
+//             reply_markup: {
+//                 inline_keyboard: [
+//                     [{ text: 'Начать заново', callback_data: 'selfTemplateScene' }],
+//                 ]
+//             }
+//         });
+//         ctx.scene.leave();
+//         return;
+//     }
 
-    // Предполагается, что функция updateProjectPosts обновляет проект, добавляя посты с isSent: false
-    try {
-        await updateProjectPosts(projectId, projectPosts);
-        ctx.reply('Посты успешно добавлены в проект и готовы к автопостингу.');
-    } catch (error) {
-        console.error('Ошибка при сохранении постов:', error);
-        ctx.reply('Произошла ошибка при сохранении постов. Пожалуйста, попробуйте снова.');
-    }
+//     // Предполагается, что функция updateProjectPosts обновляет проект, добавляя посты с isSent: false
+//     try {
+//         await updateProjectPosts(projectId, projectPosts);
+//         ctx.reply('Посты успешно добавлены в проект и готовы к автопостингу.');
+//     } catch (error) {
+//         console.error('Ошибка при сохранении постов:', error);
+//         ctx.reply('Произошла ошибка при сохранении постов. Пожалуйста, попробуйте снова.');
+//     }
 
-    ctx.scene.leave();
-});
+//     ctx.scene.leave();
+// });
 
 const stage = new Scenes.Stage();
 stage.register(subscribeScene);
@@ -235,6 +262,19 @@ stage.register(selfTemplateScene);
 bot.use(session());
 bot.use(stage.middleware());
 
+
+bot.action(/delay_(\d+)/, async (ctx) => {
+    const delay = Number(ctx.match[1]);
+    if (!ctx.session) ctx.session = {}; // Инициализация сессии, если она ещё не существует
+    ctx.session.delay = delay;
+    ctx.session.userId = ctx.from.id.toString(); // Повторная инициализация userId для уверенности
+    await ctx.reply(`Задержка установлена на ${delay / 1000} секунд. Теперь отправьте ID канала или группы для автопостинга.`);
+});
+
+function checkReadyForAutoposting(ctx) {
+    // Убедитесь, что все необходимые значения есть в сессии
+    return ctx.session.projectId && ctx.session.delay && ctx.session.userId;
+}
 
 bot.action('selfTemplateScene', async (ctx) => {
     ctx.scene.enter('selfTemplateScene');
@@ -534,19 +574,34 @@ async function checkBotAdminRights(ctx, chatId) {
     }
 }
 
-async function startAutoposting(ctx, chatId, userId) {
-    const posts = await PostFile.find({ isSent: false });
-
-    if (posts.length > 0) {
-        for (const post of posts) {
-            await ctx.telegram.sendMessage(chatId, formatPostMessage(post), { parse_mode: 'HTML' });
-            await PostFile.findByIdAndUpdate(post._id, { isSent: true });
-        }
-        await ctx.reply(`Автопостинг завершен. Отправлено ${posts.length} постов.`);
-    } else {
-        await ctx.reply("Нет постов для отправки.");
+async function startAutoposting(ctx, chatId, userId, projectId, delay) {
+    const projectExists = await UserProject.exists({ _id: projectId, userID: userId });
+    if (!projectExists) {
+        await ctx.reply("Проект не найден или вы не имеете к нему доступ.");
+        return;
     }
+
+    const postsToSend = await PostFile.find({ projectId: projectId, isSent: false });
+
+    let sentCount = 0;
+    for (const post of postsToSend) {
+        if (!post.isSent) {
+            try {
+                await ctx.telegram.sendMessage(chatId, formatPostMessage(post), { parse_mode: 'HTML' });
+                post.isSent = true;
+                await post.save();
+                sentCount++;
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } catch (error) {
+                console.error("Error sending post:", error);
+            }
+        }
+    }
+
+    await ctx.reply(`Автопостинг завершен. Отправлено ${sentCount} постов.`);
 }
+
+
 
 setInterval(checkAndSendUpdates, 60000);
 

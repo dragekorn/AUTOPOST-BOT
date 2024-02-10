@@ -42,6 +42,7 @@ const postFileSchema = new mongoose.Schema({
   data: mongoose.Schema.Types.Mixed,
   isSent: { type: Boolean, default: false },
   datePost: { type: Date, default: Date.now },
+  projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'UserProject' },
   createdAt: { type: Date, default: Date.now }
 });
 

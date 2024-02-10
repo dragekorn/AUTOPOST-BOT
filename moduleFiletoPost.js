@@ -39,32 +39,32 @@ async function processCsvFile(filePath) {
 }
 
 // Функция для обработки XLSX файла
-// В этом примере предполагается, что у вас уже есть ID проекта, в который нужно добавить посты
-async function processXlsxFile(ctx, filePath, projectName) {
+async function processXlsxFile(ctx, filePath, projectId, userId) {
   try {
-      const workbook = xlsx.readFile(filePath);
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const data = xlsx.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: null });
+    const workbook = xlsx.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const data = xlsx.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: null });
 
-      data.shift(); // Убираем заголовки, если они есть
+    data.shift(); // Убираем заголовки
 
-      let postsIds = []; // Массив для хранения ID созданных постов
-      for (const row of data) {
-          const postData = { data: row.filter(cell => cell !== null) };
-          const post = await PostFile.create(postData);
-          postsIds.push(post._id);
-      }
+    let posts = [];
+    for (const row of data) {
+      // Включаем projectId при создании каждого поста
+      const postData = { data: row.filter(cell => cell !== null), projectId: projectId, isSent: false };
+      const post = await PostFile.create(postData);
+      posts.push(post);
+    }
 
-      // После создания всех постов добавляем их ID в проект
-      await UserProject.findByIdAndUpdate(projectName, { $push: { projectPosts: { $each: postsIds } } });
+    // Поскольку теперь мы напрямую связываем посты с проектом через projectId, нет необходимости обновлять проект здесь
 
-      ctx.reply(`Данные успешно загружены и добавлены в проект. Всего загружено ${data.length} постов.`);
+    successMessageWithQuestion(ctx, `Данные успешно загружены в проект. Всего загружено ${posts.length} постов.`, posts.length);  
   } catch (error) {
-      console.error('Ошибка при обработке XLSX файла:', error);
-      ctx.reply('Произошла ошибка при обработке файла.');
+    console.error('Ошибка при обработке XLSX файла:', error);
+    ctx.reply('Произошла ошибка при обработке файла.');
   }
 }
+
 
 
 async function processFile(ctx, fileUrl) {
@@ -96,7 +96,7 @@ async function processFile(ctx, fileUrl) {
           } else if (fileUrl.href.endsWith('.csv')) {
               await processCsvFile(filePath);
           } else if (fileUrl.href.endsWith('.xlsx')) {
-              await processXlsxFile(ctx, filePath);
+            await processXlsxFile(ctx, filePath, ctx.session.projectId, ctx.from.id.toString());
           } else {
               errorFileMessage(ctx, '<b>⛔️⛔️⛔️ Ошибка ⛔️⛔️⛔️\n\nК сожалению я ещё не умею читать формат файлов, который Вы отправили.</b>\n\n<u>Попробуйте отправить XLSX, CSV или JSON</u>');
               console.log('Unsupported file format');
