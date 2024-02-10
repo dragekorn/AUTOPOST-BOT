@@ -66,6 +66,22 @@ async function processXlsxFile(ctx, filePath, projectId, userId) {
   }
 }
 
+async function downloadFile(url, timeout = 180000) { // Увеличение таймаута до 3 минут
+  return new Promise((resolve, reject) => {
+    const responseStream = axios({
+      url,
+      method: 'GET',
+      responseType: 'stream',
+      timeout
+    }).then(response => {
+      const filePath = path.join(__dirname, 'tempfile');
+      const writer = fs.createWriteStream(filePath);
+      response.data.pipe(writer);
+      writer.on('finish', () => resolve(filePath));
+      writer.on('error', reject);
+    }).catch(reject);
+  });
+}
 
 async function processFile(ctx, fileUrl) {
   const userId = ctx.from.id;
@@ -75,21 +91,10 @@ async function processFile(ctx, fileUrl) {
           console.error('Отсутствует информация о пользователе');
           return;
       }
-        const response = await axios({ url: fileUrl, method: 'GET', responseType: 'stream' });
-        const filePath = path.join(__dirname, 'tempfile'); // Временное сохранение файла
-        const writer = fs.createWriteStream(filePath);
-        response.data.pipe(writer);
+        // Скачивание файла с использованием функции downloadFile
+        const filePath = await downloadFile(fileUrl);
 
-        await new Promise((resolve, reject) => {
-            writer.on('finish', resolve);
-            writer.on('error', reject);
-        });
-
-        console.log('File URL:', fileUrl.href);
-        if (typeof fileUrl.href !== 'string') {
-            console.error('File URL is not a string');
-            return;
-        }
+        console.log('File downloaded to:', filePath);
 
         if (fileUrl.href.endsWith('.json')) {
           await processJsonFile(filePath);
