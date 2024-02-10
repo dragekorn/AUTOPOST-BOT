@@ -594,6 +594,18 @@ async function safeSendMessage(ctx, chatId, message, options) {
     }
 }
 
+function formatTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secondsLeft = seconds % 60;
+
+    return [
+        hours.toString().padStart(2, '0'),
+        minutes.toString().padStart(2, '0'),
+        secondsLeft.toString().padStart(2, '0')
+    ].join(':');
+}
+
 async function startAutoposting(ctx, chatId, userId, projectId, delay) {
     const projectExists = await UserProject.exists({ _id: projectId, userID: userId });
     if (!projectExists) {
@@ -602,20 +614,39 @@ async function startAutoposting(ctx, chatId, userId, projectId, delay) {
     }
 
     const postsToSend = await PostFile.find({ projectId: projectId, isSent: false });
-
+    const totalPosts = postsToSend.length;
     let sentCount = 0;
-    for (const post of postsToSend) {
-        if (!post.isSent) {
-            await safeSendMessage(ctx, chatId, formatPostMessage(post), { parse_mode: 'HTML' });
-            post.isSent = true;
-            await post.save();
-            sentCount++;
-            // Ждем указанную задержку перед отправкой следующего сообщения
-            await new Promise(resolve => setTimeout(resolve, delay));
-        }
+
+    // Отправляем исходное сообщение с информацией об автопостинге
+    const statusMessage = await ctx.reply(`Автопостинг запущен.\n\nСообщений отправлено: 0\nСообщений в очереди: ${totalPosts}\n\nПримерное ожидание завершения автопостинга: ${totalPosts * delay / 1000} секунд\n\nОжидайте пожалуйста.`);
+
+    // Функция для обновления статуса автопостинга
+    const updateStatusMessage = async () => {
+        const sentPosts = await PostFile.countDocuments({ projectId: projectId, isSent: true });
+        const remainingPosts = totalPosts - sentPosts;
+        const estimatedTimeSeconds = remainingPosts * delay / 1000;
+        const estimatedTimeFormatted = formatTime(estimatedTimeSeconds);
+    
+        await ctx.telegram.editMessageText(ctx.chat.id, statusMessage.message_id, null, `<b>Автопостинг запущен.</b>\n\nСообщений отправлено: ${sentPosts}\nСообщений в очереди: ${remainingPosts}\n\nПримерное ожидание завершения автопостинга: ${estimatedTimeFormatted}\n\nОжидайте пожалуйста.`, { parse_mode: 'HTML' });
+    };
+
+    // Запускаем автопостинг с задержкой и обновляем статус
+    for (let i = 0; i < totalPosts; i++) {
+        const post = postsToSend[i];
+        setTimeout(async () => {
+            if (!post.isSent) {
+                await safeSendMessage(ctx, chatId, formatPostMessage(post), { parse_mode: 'HTML' });
+                post.isSent = true;
+                await post.save();
+                sentCount++;
+                
+                // Обновляем статус после каждого отправленного сообщения
+                await updateStatusMessage();
+            }
+        }, delay * i);
     }
 
-    await ctx.reply(`Автопостинг завершен. Отправлено ${sentCount} постов.`);
+    // Здесь нет нужды отправлять финальное сообщение сразу, так как статус будет обновляться автоматически
 }
 
 
