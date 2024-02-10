@@ -4,7 +4,7 @@ const { Scenes, session, Markup } = require('telegraf');
 const rssService = require('./rssService');
 const { processFile } = require('./moduleFiletoPost');
 const { extractDomainName, formatPostMessage, successMessage, successMessageWithQuestion } = require('./utils');
-const { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
+const { User, UserProject, createNewProject, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getSubscriptions, getDetailedSubscriptions } = require('./databaseService');
 
 const fs = require('fs');
 const path = require('path');
@@ -12,6 +12,7 @@ const path = require('path');
 
 const bot = initializeBot(process.env.TELEGRAM_BOT_TOKEN);
 
+//сцена RSS-подписки
 const subscribeScene = new Scenes.BaseScene('subscribeScene');
 subscribeScene.enter((ctx) => {
     ctx.reply('Пожалуйста, отправьте RSS ссылку.', Markup.inlineKeyboard([
@@ -70,6 +71,7 @@ subscribeScene.action('cancel', (ctx) => {
     ctx.scene.enter('authScene');
 });
 
+//сцена авторизации
 const authScene = new Scenes.BaseScene('authScene');
 authScene.enter(async (ctx) => {
     const userId = ctx.from.id.toString();
@@ -104,7 +106,7 @@ authScene.on('text', async (ctx) => {
         fs.writeFileSync('key.json', JSON.stringify(updatedKeys));
 
         await addUserLicKey(ctx.from.id.toString(), userKey, ctx.from.username);
-        ctx.reply('Вы успешно авторизованы. Чтобы использовать бота, используйте кнопки ниже.', {
+        ctx.reply('Добро пожаловать в AUTOPOST BOT! Чтобы использовать бота, используйте кнопки ниже.', {
             reply_markup: {
                 inline_keyboard: [
                     [
@@ -123,6 +125,7 @@ authScene.on('text', async (ctx) => {
     }
 });
 
+//сцена автопостинга без шаблона
 const autopostingScene = new Scenes.BaseScene('autopostingScene');
 
 autopostingScene.enter(async (ctx) => {
@@ -143,13 +146,99 @@ autopostingScene.on('text', async (ctx) => {
     await ctx.scene.leave();
 });
 
+//сцена автопостинга с созданием своего проекта с собственным шаблоном
+const selfTemplateScene = new Scenes.BaseScene('selfTemplateScene');
+
+selfTemplateScene.enter((ctx) => {
+    ctx.replyWithHTML('Введите название своего проекта:');
+});
+
+selfTemplateScene.on('text', async (ctx) => {
+    const projectName = ctx.message.text;
+    const userId = ctx.from.id;
+
+    try {
+        const newProject = await createNewProject(userId, projectName, []);
+        ctx.session.projectId = newProject._id; // Сохраняем ID проекта для дальнейшего использования
+        ctx.reply('Проект создан успешно. Теперь, пожалуйста, отправьте мне файл с данными для постов.');
+    } catch (error) {
+        console.error('Ошибка при создании проекта:', error);
+        ctx.reply('Произошла ошибка при создании проекта. Пожалуйста, попробуйте снова.');
+    }
+});
+
+selfTemplateScene.on('document', async (ctx) => {
+    const projectId = ctx.session.projectId;
+    if (!projectId) {
+        ctx.reply('Произошла ошибка: ID проекта не найден. Пожалуйста, начните процесс заново.', {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Начать заново', callback_data: 'selfTemplateScene' }],
+                ]
+            }
+        });
+        ctx.scene.leave();
+        return;
+    }
+
+    // Логика обработки файла
+    const fileId = ctx.message.document.file_id;
+    const fileLink = await ctx.telegram.getFileLink(fileId);
+
+    try {
+        const projectPosts = await processFile(ctx, fileLink); // Эта функция должна быть адаптирована для возврата данных постов
+        ctx.session.projectPosts = projectPosts; // Сохраняем посты в сессии для использования в следующем шаге
+        ctx.reply('Файл успешно обработан. Теперь введите шаблон для сохранения постов в базу данных, используя поля из файла.');
+    } catch (error) {
+        console.error('Ошибка при обработке файла:', error);
+        ctx.reply('Произошла ошибка при обработке файла. Пожалуйста, попробуйте снова.');
+    }
+});
+
+// Шаг 4: Получение шаблона и запись постов в базу данных
+selfTemplateScene.on('text', async (ctx, next) => {
+    if (ctx.message.text.startsWith('/')) {
+        return next();
+    }
+
+    const projectId = ctx.session.projectId;
+    const projectPosts = ctx.session.projectPosts;
+    if (!projectId || !projectPosts) {
+        ctx.reply('Произошла ошибка: отсутствуют данные проекта или постов. Пожалуйста, начните процесс заново.', {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Начать заново', callback_data: 'selfTemplateScene' }],
+                ]
+            }
+        });
+        ctx.scene.leave();
+        return;
+    }
+
+    // Предполагается, что функция updateProjectPosts обновляет проект, добавляя посты с isSent: false
+    try {
+        await updateProjectPosts(projectId, projectPosts);
+        ctx.reply('Посты успешно добавлены в проект и готовы к автопостингу.');
+    } catch (error) {
+        console.error('Ошибка при сохранении постов:', error);
+        ctx.reply('Произошла ошибка при сохранении постов. Пожалуйста, попробуйте снова.');
+    }
+
+    ctx.scene.leave();
+});
+
 const stage = new Scenes.Stage();
 stage.register(subscribeScene);
 stage.register(authScene);
 stage.register(autopostingScene);
+stage.register(selfTemplateScene);
 bot.use(session());
 bot.use(stage.middleware());
 
+
+bot.action('selfTemplateScene', async (ctx) => {
+    ctx.scene.enter('selfTemplateScene');
+});
 
 bot.action('auth', async (ctx) => {
     await ctx.scene.enter('authScene');
@@ -183,18 +272,16 @@ bot.action('my_subscriptions', async (ctx) => {
         message += `📜 <b>${sub.channelName}</b>\n[ID: <code>${sub.channelId}</code>]\n`;
 
         sub.rssFeeds.forEach((feed, feedIndex) => {
-            const domainName = extractDomainName(feed); // Извлекаем имя домена из URL
+            const domainName = extractDomainName(feed);
             message += `🔗 <a href="${feed}">${domainName}</a>\n`;
             inlineKeyboard.push([{ text: `Удалить ${domainName}`, callback_data: `delete_${sub.subId}_${feedIndex}` }]);
         });
 
-        // Добавляем разделитель между подписками, если есть несколько подписок
         if (index < detailedSubscriptions.length - 1) {
             message += '➖➖➖\n';
         }
     });
 
-    // Добавляем кнопку "Добавить RSS-линк" только один раз в конец всех кнопок
     inlineKeyboard.push([{ text: '⭐️ Добавить RSS-линк', callback_data: 'subscribe' }]);
 
     ctx.replyWithHTML(message, {
@@ -221,7 +308,13 @@ bot.action('subscribe', async (ctx) => {
     const user = await findUser(userId);
     
     if (!user || !user.licKeys) {
-        ctx.reply('Для использования этой команды необходимо авторизоваться. Пожалуйста, введите команду /auth <ваш_ключ>.');
+        ctx.reply('Для использования этой команды необходимо авторизоваться. Пожалуйста, нажмите на кнопку ниже.', {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🔐 Авторизация', callback_data: 'auth'}],
+                ]
+            }
+        });
         return;
     }
     
@@ -229,56 +322,61 @@ bot.action('subscribe', async (ctx) => {
 });
 
 bot.action('autopostfile', async (ctx) => {
-    // Проверка на наличие лицензионного ключа у пользователя
     const userId = ctx.from.id.toString();
     const user = await findUser(userId);
 
     if (!user || !user.licKeys) {
-        await ctx.reply('Для использования этой функции необходима авторизация.');
+        await ctx.reply('Для использования этой функции необходима авторизация.', {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: '🔐 Авторизация', callback_data: 'auth'}],
+                ]
+            }
+        });
         return;
     }
 
-    ctx.replyWithHTML('Пожалуйста, отправьте мне файл для автопостинга в формате XLSX, CSV или JSON.\n\nОбязательно убедитесь, что структура Вашего файла следующая:\n<b>Заголовок статьи</b>\n<b>Текст статьи</b>\n<b>Подписи хэштеги</b>\n\nЕсли у Вас такая структура, отправляйте файл. Если нет, пожалуйста, приведите Ваш файл в должный вид.', Markup.inlineKeyboard([
-        Markup.button.callback('Отмена', 'cancel')
+    ctx.replyWithHTML('Пожалуйста, отправьте мне файл для автопостинга в формате XLSX, CSV или JSON.\n\nОбязательно убедитесь, что структура Вашего файла следующая:\n<b>Заголовок статьи</b>\n<b>Текст статьи</b>\n<b>Подписи хэштеги</b>\n\nЕсли у Вас такая структура, отправляйте файл. Если нет, пожалуйста, используйте кнопку <b>📃 Свой шаблон</b>, либо приведите свой файл в должный вид.', 
+    Markup.inlineKeyboard([
+        Markup.button.callback('📃 Свой проект', 'selfTemplateScene'),
+        Markup.button.callback('❌ Отмена', 'cancel')
     ]));
-    ctx.session.awaitingFile = true; // Метка ожидания файла
+    ctx.session.awaitingFile = true;
 });
 
 bot.on('document', async (ctx) => {
     if (ctx.session && ctx.session.awaitingFile) {
         try {
-            // Получаем информацию о файле
-            const chatId = ctx.chat.id;  // Исправлено здесь
+
+            const chatId = ctx.chat.id;
             const fileId = ctx.message.document.file_id;
             const fileLink = await ctx.telegram.getFileLink(fileId);
 
             ctx.reply('Файл получен, начинаю обработку...');
 
-            await processFile(ctx, fileLink); // Обработка файла
+            await processFile(ctx, fileLink);
         } catch (error) {
             console.error('Ошибка при обработке файла:', error);
             ctx.reply('Произошла ошибка при обработке файла.');
         }
 
-        delete ctx.session.awaitingFile; // Очищаем метку ожидания файла
+        delete ctx.session.awaitingFile;
     } else {
         ctx.reply('Отправьте файл после активации команды автопостинга через /autopostfile');
     }
 });
 
 bot.action(/delete_(.+)/, async (ctx) => {
-    const subId = parseInt(ctx.match[1]); // Парсим subId из callback_data
+    const subId = parseInt(ctx.match[1]);
   
     try {
-      const result = await Subscription.findOneAndDelete({ subId: subId }); // Используем subId для поиска и удаления
+      const result = await Subscription.findOneAndDelete({ subId: subId });
       if (result) {
         await ctx.answerCbQuery('Подписка успешно удалена');
 
-        // Получаем обновлённый список подписок пользователя
         const userId = ctx.from.id.toString();
         const detailedSubscriptions = await getDetailedSubscriptions(userId);
 
-        // Формируем обновлённое сообщение и клавиатуру
         let messageText = '<b>Ваши действующие подписки на RSS-ленты и активные каналы:</b>\n\n';
         const inlineKeyboard = [];
 
@@ -286,12 +384,11 @@ bot.action(/delete_(.+)/, async (ctx) => {
             messageText += `📜 <b>${sub.channelName}</b>\n[ID: <code>${sub.channelId}</code>]\n`;
 
             sub.rssFeeds.forEach((feed, feedIndex) => {
-                const domainName = extractDomainName(feed); // Извлекаем имя домена из URL
+                const domainName = extractDomainName(feed);
                 messageText += `🔗 <a href="${feed}">${domainName}</a>\n`;
                 inlineKeyboard.push([{ text: `Удалить ${domainName}`, callback_data: `delete_${sub.subId}_${feedIndex}` }]);
             });
 
-        // Добавляем разделитель между подписками, если есть несколько подписок
         if (index < detailedSubscriptions.length - 1) {
             messageText += '➖➖➖\n';
         }
@@ -310,6 +407,28 @@ bot.action(/delete_(.+)/, async (ctx) => {
     }
 });
 
+bot.action('load_data', async (ctx) => {
+    if (!ctx.session.xlsxData) {
+      ctx.reply('Ошибка: отсутствуют данные для загрузки. Пожалуйста, загрузите файл снова.');
+      return;
+    }
+  
+    const data = ctx.session.xlsxData;
+  
+    try {
+      for (const row of data) {
+        // Создаем пост, где каждая строка - это массив данных
+        await PostFile.create({ data: row.filter(cell => cell !== null) }); // Исключаем null (пустые ячейки)
+      }
+  
+      ctx.reply(`Данные успешно загружены. Всего загружено ${data.length} постов.`);
+    } catch (error) {
+      console.error('Ошибка при загрузке данных:', error);
+      ctx.reply('Произошла ошибка при загрузке данных. Пожалуйста, попробуйте снова.');
+    } finally {
+      delete ctx.session.xlsxData;
+    }
+  });
 
 
 bot.on('text', async (ctx) => {
@@ -338,10 +457,8 @@ bot.action('start_autoposting', async (ctx) => {
 bot.action('pause_autoposting', async (ctx) => {
     const userId = ctx.from.id.toString();
     
-    // Это просто пример. Вам нужно адаптировать его под вашу логику и структуру базы данных
     await updateUserAutopostingStatus(userId, { autopostingActive: false });
 
-    // Отправляем сообщение пользователю о приостановке автопостинга
     await ctx.reply('Автопостинг приостановлен. Вы можете возобновить его в любое время, нажав "Продолжить автопостинг".', Markup.inlineKeyboard([
         Markup.button.callback('Продолжить автопостинг', 'resume_autoposting')
     ]));
@@ -350,24 +467,19 @@ bot.action('pause_autoposting', async (ctx) => {
 bot.action('cancel_autoposting', async (ctx) => {
     const userId = ctx.from.id.toString();
     
-    // Здесь логика для полной отмены автопостинга, например, удаление заданий из очереди автопостинга
     await cancelUserAutoposting(userId);
 
-    // Отправляем сообщение пользователю об отмене автопостинга
     await ctx.reply('Автопостинг отменен. Вы можете запустить новую сессию автопостинга в любое время.', Markup.inlineKeyboard([
         Markup.button.callback('Запустить автопостинг', 'start_autoposting'),
         Markup.button.callback('Загрузить новые посты', 'autopostfile')
     ]));
 });
 
-// Дополнительно, функция для возобновления автопостинга, если вам это нужно
 bot.action('resume_autoposting', async (ctx) => {
     const userId = ctx.from.id.toString();
     
-    // Возобновляем автопостинг для пользователя
     await updateUserAutopostingStatus(userId, { autopostingActive: true });
 
-    // Сообщение о возобновлении автопостинга
     await ctx.reply('Автопостинг возобновлен. Посты будут отправляться в соответствии с вашей настройкой.');
 });
 
@@ -411,27 +523,23 @@ const checkAndSendUpdates = async () => {
 async function checkBotAdminRights(ctx, chatId) {
     try {
         const member = await ctx.telegram.getChatMember(chatId, ctx.botInfo.id);
-        // Проверяем, что бот является администратором и имеет права на отправку сообщений
         if (member.status === 'administrator' && member.can_post_messages) {
-            return true; // Бот имеет права администратора и может отправлять сообщения
+            return true;
         } else {
-            return false; // Бот не имеет достаточных прав
+            return false;
         }
     } catch (error) {
         console.error("Ошибка при проверке прав администратора бота:", error);
-        return false; // В случае ошибки также считаем, что бот не имеет прав
+        return false;
     }
 }
 
 async function startAutoposting(ctx, chatId, userId) {
-    // Получаем непосланные посты из базы данных
     const posts = await PostFile.find({ isSent: false });
 
     if (posts.length > 0) {
         for (const post of posts) {
-            // Отправляем посты в канал
             await ctx.telegram.sendMessage(chatId, formatPostMessage(post), { parse_mode: 'HTML' });
-            // Обновляем статус поста на "отправленный"
             await PostFile.findByIdAndUpdate(post._id, { isSent: true });
         }
         await ctx.reply(`Автопостинг завершен. Отправлено ${posts.length} постов.`);

@@ -4,6 +4,13 @@ mongoose.connect('mongodb://localhost:27017/RSStoPostBot')
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
 
+const projectPostSchema = new mongoose.Schema({
+  title: String,
+  text: String,
+  additionalInfo: mongoose.Schema.Types.Mixed,
+  isSent: { type: Boolean, default: false }
+}, { timestamps: true });
+
   const subscriptionSchema = new mongoose.Schema({
     _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
     userId: String,
@@ -32,16 +39,28 @@ const userSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 
 const postFileSchema = new mongoose.Schema({
-  title: String,
-  text: String,
-  additionalInfo: mongoose.Schema.Types.Mixed,
+  data: mongoose.Schema.Types.Mixed,
+  isSent: { type: Boolean, default: false },
   datePost: { type: Date, default: Date.now },
-  createdAt: { type: Date, default: Date.now },
-  isSent: { type: Boolean, default: false }
+  createdAt: { type: Date, default: Date.now }
 });
 
 const PostFile = mongoose.model('PostFile', postFileSchema);
 
+const userProjectSchema = new mongoose.Schema({
+  userID: {
+    type: Number,
+    required: true,
+    ref: 'User'
+  },
+  projectName: {
+    type: String,
+    required: true
+  },
+  projectPosts: [postFileSchema]
+}, { timestamps: true });
+
+const UserProject = mongoose.model('UserProject', userProjectSchema);
 
 const findUser = async (userId) => {
   return await User.findOne({ userId });
@@ -189,4 +208,21 @@ const deleteSubscription = async (userId, rssLink = null, channelId = null) => {
   }
 };
 
-module.exports = { User, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getUserSubscriptions, getLastSentPosts, saveSentPosts, getSubscriptions, getDetailedSubscriptions };
+async function createNewProject(userID, projectName, projectPosts) {
+  try {
+    const newProject = new UserProject({
+      userID,
+      projectName,
+      projectPosts
+    });
+    
+    await newProject.save();
+    console.log('Проект успешно создан!');
+    return newProject;
+  } catch (error) {
+    console.error('Ошибка при создании проекта:', error);
+    throw error;
+  }
+}
+
+module.exports = { User, UserProject, createNewProject, PostFile, findUser, addUserLicKey, Subscription, saveSubscription, deleteSubscription, getUserSubscriptions, getLastSentPosts, saveSentPosts, getSubscriptions, getDetailedSubscriptions };

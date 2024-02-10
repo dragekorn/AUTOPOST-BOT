@@ -1,4 +1,5 @@
-const { PostFile } = require('./databaseService');
+const { PostFile, UserProject } = require('./databaseService');
+const { Markup } = require('telegraf');
 const readXlsxFile = require('read-excel-file/node');
 const xlsx = require('xlsx');
 const axios = require('axios');
@@ -38,51 +39,33 @@ async function processCsvFile(filePath) {
 }
 
 // Функция для обработки XLSX файла
-async function processXlsxFile(ctx, filePath) {
+// В этом примере предполагается, что у вас уже есть ID проекта, в который нужно добавить посты
+async function processXlsxFile(ctx, filePath, projectName) {
   try {
-    const workbook = xlsx.readFile(filePath);
-    const sheetName = workbook.SheetNames[0];
-    const data = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      const workbook = xlsx.readFile(filePath);
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const data = xlsx.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: null });
 
-    let loadedPostsCount = 0;
-    let skippedPostsCount = 0; // Счетчик пропущенных постов
+      data.shift(); // Убираем заголовки, если они есть
 
-    for (const row of data) {
-      // Изменяем запрос на проверку уникальности только по тексту статьи
-      const textQuery = {
-        text: row['Текст статьи']
-      };
-
-      // Ищем существующий пост только с таким же текстом
-      const existingPost = await PostFile.findOne(textQuery);
-      if (existingPost) {
-        skippedPostsCount++;
-        continue; // Пропускаем добавление дублирующегося поста
+      let postsIds = []; // Массив для хранения ID созданных постов
+      for (const row of data) {
+          const postData = { data: row.filter(cell => cell !== null) };
+          const post = await PostFile.create(postData);
+          postsIds.push(post._id);
       }
 
-      // Создаем пост, если он уникален по тексту
-      const post = {
-        title: row['Заголовок статьи'],
-        text: row['Текст статьи'],
-        additionalInfo: row['Подписи хэштеги']
-      };
+      // После создания всех постов добавляем их ID в проект
+      await UserProject.findByIdAndUpdate(projectName, { $push: { projectPosts: { $each: postsIds } } });
 
-      await PostFile.create(post);
-      loadedPostsCount++;
-    }
-
-    const totalPostsCount = await getPostsCount(); // Общее количество постов в базе
-    // Формирование сообщения с учетом количества пропущенных постов
-    let message = `Файл успешно обработан, в базу было добавлено ${loadedPostsCount} новых постов.`;
-    if (skippedPostsCount > 0) {
-      message += `\n\nПропущенных постов: ${skippedPostsCount}.\nВидимо какие-то из постов вы уже добавляли в базу. Пожалуйста, перепроверьте файл.`;
-    }
-    successMessageWithQuestion(ctx, message, totalPostsCount);
+      ctx.reply(`Данные успешно загружены и добавлены в проект. Всего загружено ${data.length} постов.`);
   } catch (error) {
-    console.error('Ошибка при обработке XLSX файла:', error);
-    successMessage(ctx, 'Произошла ошибка при обработке файла.');
+      console.error('Ошибка при обработке XLSX файла:', error);
+      ctx.reply('Произошла ошибка при обработке файла.');
   }
 }
+
 
 async function processFile(ctx, fileUrl) {
   const userId = ctx.from.id;
