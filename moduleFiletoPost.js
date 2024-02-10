@@ -50,8 +50,9 @@ async function processXlsxFile(ctx, filePath, projectId, userId) {
 
     let posts = [];
     for (const row of data) {
-      // Включаем projectId при создании каждого поста
-      const postData = { data: row.filter(cell => cell !== null), projectId: projectId, isSent: false };
+      // Заменяем пустые ячейки на "Нет данных"
+      const processedRow = row.map(cell => (cell === null || cell === '' ? "Нет данных" : cell));
+      const postData = { data: processedRow, projectId: projectId, isSent: false };
       const post = await PostFile.create(postData);
       posts.push(post);
     }
@@ -64,7 +65,6 @@ async function processXlsxFile(ctx, filePath, projectId, userId) {
     ctx.reply('Произошла ошибка при обработке файла.');
   }
 }
-
 
 
 async function processFile(ctx, fileUrl) {
