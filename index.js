@@ -129,47 +129,45 @@ authScene.on('text', async (ctx) => {
 const autopostingScene = new Scenes.BaseScene('autopostingScene');
 
 autopostingScene.enter(async (ctx) => {
-    await ctx.reply("Пожалуйста, введите название вашего проекта для автопостинга.");
+    const userId = ctx.from.id.toString();
+    const projects = await UserProject.find({ userID: userId });
+    
+    if (projects.length > 0) {
+        let messageText = 'Выберите проект для автопостинга:\n';
+        const projectsKeyboard = projects.map(project =>
+            Markup.button.callback(project.projectName, `select_project_${project._id}`)
+        );
+
+        await ctx.reply(messageText, Markup.inlineKeyboard([...projectsKeyboard, Markup.button.callback('❌ Отмена', 'cancel')]));
+    } else {
+        await ctx.reply("У Вас ещё нет проектов. Создайте их для начала по кнопке ниже.",
+            Markup.inlineKeyboard([Markup.button.callback('📃 Создать проект', 'selfTemplateScene'), Markup.button.callback('❌ Отмена', 'cancel')])
+        );
+    }
 });
 
-autopostingScene.on('text', async (ctx, next) => {
+autopostingScene.on('text', async (ctx) => {
     const chatId = ctx.message.text;
-    // Проверяем, ввели ли ID канала или название проекта
-    if (/^-100\d+$/.test(ctx.message.text)) {
-        // Проверяем, выбран ли проект
-        console.log('Session data:', ctx.session);
-        if (checkReadyForAutoposting(ctx)) {
-            const chatId = ctx.message.text;
-            const userId = ctx.from.id.toString();
+
+    // Проверяем, является ли введенный текст ID канала
+    if (/^-100\d+$/.test(chatId)) {
+        if (ctx.session.projectId && ctx.session.delay) { // Проверяем, выбраны ли проект и задержка
             const hasAdminRights = await checkBotAdminRights(ctx, chatId);
 
             if (hasAdminRights) {
-                await startAutoposting(ctx, chatId, ctx.session.userId, ctx.session.projectId, ctx.session.delay);
-                ctx.session.projectId = null; // Очищаем projectId из сессии после запуска автопостинга
-                ctx.session.delay = null; // Очищаем выбранную задержку из сессии
+                // Запускаем автопостинг
+                await startAutoposting(ctx, chatId, ctx.from.id.toString(), ctx.session.projectId, ctx.session.delay);
+                ctx.session.projectId = null;
+                ctx.session.delay = null;
+                ctx.scene.leave();
             } else {
-                await ctx.reply("У бота нет прав администратора в этом канале/группе.\nПожалуйста, добавьте бота в группу и сделайте его администратором. После чего, снова отправьте запрос.");
+                await ctx.reply("У бота нет прав администратора в этом канале/группе. Пожалуйста, добавьте бота в группу и сделайте его администратором.");
             }
-            await ctx.scene.leave(); // Выход из сцены после запуска или ошибки автопостинга
         } else {
-            await ctx.reply("Пожалуйста, сначала выберите проект и задержку для автопостинга.");
+            await ctx.reply("Не все параметры выбраны. Пожалуйста, выберите проект и установите задержку.");
         }
     } else {
-        // Поиск проекта по имени
-        const projectName = ctx.message.text;
-        const project = await UserProject.findOne({ projectName: projectName, userID: ctx.from.id.toString() });
-        if (project) {
-            ctx.session.projectId = project._id.toString();
-            await ctx.reply("Проект найден. Теперь выберите интервал задержки между постами.", Markup.inlineKeyboard([
-                Markup.button.callback('5 секунд', 'delay_5000'),
-                Markup.button.callback('10 секунд', 'delay_10000'),
-                Markup.button.callback('1 минута', 'delay_60000'),
-                Markup.button.callback('10 минут', 'delay_600000')
-            ]));
-        } else {
-            await ctx.reply(`Проект "${projectName}" не найден. Попробуйте еще раз или создайте новый проект.`);
-            // Здесь можно добавить логику для создания нового проекта
-        }
+        await ctx.reply("Введите корректный ID канала или группы.");
     }
 });
 
@@ -273,11 +271,25 @@ bot.use(session());
 bot.use(stage.middleware());
 
 
+// Добавляем обработчик для выбора проекта
+bot.action(/select_project_(.+)/, async (ctx) => {
+    const selectedProjectId = ctx.match[1];
+    ctx.session.projectId = selectedProjectId;
+
+    // Запрос задержки после выбора проекта
+    await ctx.reply("Проект выбран. Теперь выберите интервал задержки между постами.", Markup.inlineKeyboard([
+        Markup.button.callback('5 секунд', 'delay_5000'),
+        Markup.button.callback('10 секунд', 'delay_10000'),
+        Markup.button.callback('1 минута', 'delay_60000'),
+        Markup.button.callback('10 минут', 'delay_600000')
+    ]));
+});
+
 bot.action(/delay_(\d+)/, async (ctx) => {
     const delay = Number(ctx.match[1]);
-    if (!ctx.session) ctx.session = {}; // Инициализация сессии, если она ещё не существует
     ctx.session.delay = delay;
-    ctx.session.userId = ctx.from.id.toString(); // Повторная инициализация userId для уверенности
+
+    // Запрос ID канала после выбора задержки
     await ctx.reply(`Задержка установлена на ${delay / 1000} секунд. Теперь отправьте ID канала или группы для автопостинга.`);
 });
 
@@ -386,13 +398,83 @@ bot.action('autopostfile', async (ctx) => {
         return;
     }
 
-    ctx.replyWithHTML('Добро пожаловать в секцию автопостинга из файла.\n\nПожалуйста, нажмите на кнопку 📃 Создать проект и следуйте инструкциям.', 
-    Markup.inlineKeyboard([
-        Markup.button.callback('📃 Создать проект', 'selfTemplateScene'),
-        Markup.button.callback('❌ Отмена', 'cancel')
-    ]));
+    const projects = await UserProject.find({ userID: userId });
+    let messageText = 'Добро пожаловать в секцию автопостинга из файла.\n\n';
+
+    let keyboardOptions = [
+        [Markup.button.callback('📃 Создать проект', 'selfTemplateScene'), Markup.button.callback('❌ Отмена', 'cancel')],
+        [Markup.button.callback('▶️ Начать автопостинг', 'start_autoposting')]
+    ];
+
+    if (projects && projects.length > 0) {
+        messageText += 'Ваши текущие проекты и статус сообщений:\n';
+        for (const project of projects) {
+            const sentMessagesCount = await PostFile.countDocuments({ projectId: project._id, isSent: true });
+            const pendingMessagesCount = await PostFile.countDocuments({ projectId: project._id, isSent: false });
+
+            messageText += `📁 ${project.projectName}\n`;
+            messageText += `   ✅ Отправлено: ${sentMessagesCount}\n`;
+            messageText += `   🕒 Ожидает отправки: ${pendingMessagesCount}\n\n`;
+
+            keyboardOptions.push([Markup.button.callback(`🗑 Удалить ${project.projectName}`, `delete_project_${project._id}`)]);
+        }
+    } else {
+        messageText += 'У вас пока нет проектов.\n\nПожалуйста, создайте новый проект.';
+    }
+
+    await ctx.replyWithHTML(messageText, Markup.inlineKeyboard(keyboardOptions));
     ctx.session.awaitingFile = true;
 });
+
+
+
+bot.action(/delete_project_(.+)/, async (ctx) => {
+    const projectId = ctx.match[1]; // Извлеките ID проекта из callback_data
+    const userId = ctx.from.id.toString(); // Получите ID пользователя
+
+    try {
+        // Удаление всех постов, связанных с проектом
+        await PostFile.deleteMany({ projectId: projectId });
+
+        // Удаление самого проекта
+        await UserProject.findByIdAndDelete(projectId);
+
+        // После удаления проекта получаем обновленный список проектов пользователя
+        const projects = await UserProject.find({ userID: userId });
+
+        let messageText = 'Добро пожаловать в секцию автопостинга из файла.\n\n';
+        let keyboardOptions = [
+            [Markup.button.callback('📃 Создать проект', 'selfTemplateScene'), Markup.button.callback('❌ Отмена', 'cancel')],
+            [Markup.button.callback('▶️ Начать автопостинг', 'start_autoposting')]
+        ];
+
+        if (projects && projects.length > 0) {
+            messageText += 'Ваши текущие проекты и статус сообщений:\n';
+            for (const project of projects) {
+                const sentMessagesCount = await PostFile.countDocuments({ projectId: project._id, isSent: true });
+                const pendingMessagesCount = await PostFile.countDocuments({ projectId: project._id, isSent: false });
+
+                messageText += `📁 ${project.projectName}\n`;
+                messageText += `   ✅ Отправлено: ${sentMessagesCount}\n`;
+                messageText += `   🕒 Ожидает отправки: ${pendingMessagesCount}\n\n`;
+
+                keyboardOptions.push([Markup.button.callback(`🗑 Удалить ${project.projectName}`, `delete_project_${project._id}`)]);
+            }
+        } else {
+            messageText += 'Все проекты были удалены.\n\nПожалуйста, создайте новый проект.';
+        }
+
+        // Обновляем сообщение с новым списком проектов
+        await ctx.editMessageText(messageText, Markup.inlineKeyboard(keyboardOptions));
+    } catch (error) {
+        console.error('Ошибка при удалении проекта и постов:', error);
+        // В случае ошибки пытаемся отправить сообщение об ошибке без изменения оригинального сообщения
+        await ctx.answerCbQuery('Произошла ошибка при попытке удалить проект. Пожалуйста, попробуйте снова.', true);
+    }
+});
+
+
+
 
 // bot.on('document', async (ctx) => {
 //     if (ctx.session && ctx.session.awaitingFile) {
@@ -636,7 +718,7 @@ async function startAutoposting(ctx, chatId, userId, projectId, delay) {
         await ctx.telegram.editMessageText(ctx.chat.id, statusMessage.message_id, null, `<b>Автопостинг запущен.</b>\n\nСообщений отправлено: ${sentPosts}\nСообщений в очереди: ${remainingPosts}\n\nПримерное ожидание завершения автопостинга: ${estimatedTimeFormatted}\n\nОжидайте пожалуйста.`, { parse_mode: 'HTML' });
     };
 
-    const messageTemplate = '#РейтингМоскОблСтоимостьОрганизации\n<b>Рейтинг</b>\nОрганизации Московской Области\nВид деятельности:\n{7}\n\n<b>Место в рейтинге</b>: {12} по величине "Стоимости организации"\n\n<b>Название:</b> {0}\n<b>ИНН</b>: {1} и КПП {2}\nАдрес: {3}\n\nФИО руководителя: {4} {5} {6}\nВид деятельности: {7}\n\nИдентификатор ЭДО: {13}\n\n#Рейтинг\n#инн{1} #кпп{2}\n#РейтингМоскОблСтоимостьОрганизации\n\n<b>Жми комментировать и дополняй информацию организаций: прайс, презентацию, контакты, реквизиты, отзывы, как пройти и другую информацию.</b>\nТелефоны {8}\nemail: {9}';
+    const messageTemplate = '#РейтингМоскОблСтоимостьОрганизации\n*Рейтинг*\nОрганизации Московской Области\nВид деятельности:\n{7}\n\n*Место в рейтинге* _{12}_ по величине "Стоимости организации"\n\n*Название:* {0}\n*ИНН* {1} и *КПП* {2}\n*Адрес:* {3}\n\n*Руководитель:* _{4} {5} {6}_\nВид деятельности: {7}\n\nИдентификатор ЭДО: {13}\n\n#Рейтинг\n#инн{1} #кпп{2}\n#РейтингМоскОблСтоимостьОрганизации\n\n*Жми комментировать и дополняй информацию организаций: прайс, презентацию, контакты, реквизиты, отзывы, как пройти и другую информацию.*\n\n*Телефоны:* _{8}_\nemail: _{9}_';
     
     // Запускаем автопостинг с задержкой и обновляем статус
     for (let i = 0; i < totalPosts; i++) {
@@ -645,7 +727,7 @@ async function startAutoposting(ctx, chatId, userId, projectId, delay) {
             if (!post.isSent) {
                 // Обновляем вызов функции для использования шаблона
                 const formattedMessage = formatPostMessage(post, messageTemplate);
-                await safeSendMessage(ctx, chatId, formattedMessage, { parse_mode: 'HTML' });
+                await safeSendMessage(ctx, chatId, formattedMessage, { parse_mode: 'Markdown' });
                 post.isSent = true;
                 await post.save();
                 sentCount++;
