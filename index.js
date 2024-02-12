@@ -718,7 +718,32 @@ async function startAutoposting(ctx, chatId, userId, projectId, delay) {
         await ctx.telegram.editMessageText(ctx.chat.id, statusMessage.message_id, null, `<b>Автопостинг запущен.</b>\n\nСообщений отправлено: ${sentPosts}\nСообщений в очереди: ${remainingPosts}\n\nПримерное ожидание завершения автопостинга: ${estimatedTimeFormatted}\n\nОжидайте пожалуйста.`, { parse_mode: 'HTML' });
     };
 
-    const messageTemplate = '#РейтингМоскОблСтоимостьОрганизации\n*Рейтинг*\nОрганизации Московской Области\nВид деятельности:\n{7}\n\n*Место в рейтинге* _{12}_ по величине "Стоимости организации"\n\n*Название:* {0}\n*ИНН* {1} и *КПП* {2}\n*Адрес:* {3}\n\n*Руководитель:* _{4} {5} {6}_\nВид деятельности: {7}\n\nИдентификатор ЭДО: {13}\n\n#Рейтинг\n#инн{1} #кпп{2}\n#РейтингМоскОблСтоимостьОрганизации\n\n*Жми комментировать и дополняй информацию организаций: прайс, презентацию, контакты, реквизиты, отзывы, как пройти и другую информацию.*\n\n*Телефоны:* _{8}_\nemail: _{9}_';
+    const messageTemplate = `
+    #РейтингМоскОблСтоимостьОрганизации
+<b>Рейтинг</b>
+Организации Московской Области
+Вид деятельности:
+{7}
+    
+<b>Место в рейтинге</b> {12} по величине "Стоимости организации"
+    
+<b>Название:</b> {0}
+<b>ИНН</b> {1} и <b>КПП</b> {2}
+<b>Адрес:</b> {3}
+    
+<b>Руководитель:</b> {4} {5} {6}
+Вид деятельности: {7}
+    
+Идентификатор ЭДО: {13}
+    
+#Рейтинг
+#инн{1} #кпп{2}
+#РейтингМоскОблСтоимостьОрганизации
+  
+<b>Жми комментировать и дополняй информацию организаций: прайс, презентацию, контакты, реквизиты, отзывы, как пройти и другую информацию.</b>
+<b>Телефоны:</b> {8}
+email: {9}
+`;
     
     // Запускаем автопостинг с задержкой и обновляем статус
     for (let i = 0; i < totalPosts; i++) {
@@ -727,7 +752,7 @@ async function startAutoposting(ctx, chatId, userId, projectId, delay) {
             if (!post.isSent) {
                 // Обновляем вызов функции для использования шаблона
                 const formattedMessage = formatPostMessage(post, messageTemplate);
-                await safeSendMessage(ctx, chatId, formattedMessage, { parse_mode: 'Markdown' });
+                await safeSendMessage(ctx, chatId, formattedMessage, { parse_mode: 'HTML' });
                 post.isSent = true;
                 await post.save();
                 sentCount++;
