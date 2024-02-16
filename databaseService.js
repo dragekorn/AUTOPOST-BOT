@@ -108,7 +108,7 @@ const saveSentPosts = async (channelId, newPostLinks) => {
       { $addToSet: { postLinks: { $each: newPostLinks } } },
       { new: true, upsert: true }
     );
-    console.log(`Updated posts for ${channelId}`);
+    // console.log(`Updated posts for ${channelId}`);
     return record ? record.postLinks : [];
   } catch (err) {
     console.error('Error saving sent posts:', err);
