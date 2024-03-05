@@ -389,19 +389,16 @@ bot.action('comments', async (ctx) => {
 
 // Обработчик успешного платежа
 bot.on('successful_payment', async (ctx) => {
-    // ctx.update.message.successful_payment содержит детали успешного платежа
-    const successfulPayment = ctx.update.message.successful_payment;
-    console.log('Успешный платеж:', successfulPayment);
-
-    // Извлекаем userId из сообщения
+    // Извлекаем userId и сумму платежа из сообщения
     const userId = ctx.update.message.from.id.toString();
+    const amountPaid = ctx.update.message.successful_payment.total_amount; // Сумма в минимальных единицах валюты (копейках)
 
     try {
-        // Обновляем статус оплаты пользователя на true
-        await updateUserPaymentStatus(userId, true);
+        // Обновляем статус оплаты пользователя, добавляем токены и устанавливаем срок подписки
+        const tokensAdded = await updateUserPaymentStatus(userId, true, amountPaid);
 
-        // Отправляем пользователю подтверждение об успешной оплате
-        ctx.reply('Спасибо за вашу оплату! Теперь вы можете оставлять комментарии в группе.');
+        // Отправляем пользователю подтверждение об успешной оплате и информацию о добавленных токенах
+        ctx.reply(`Спасибо за вашу оплату! Вам добавлено ${tokensAdded} токенов для комментариев. Подписка действует в течение 30 дней.`);
     } catch (error) {
         console.error('Ошибка при обработке успешного платежа:', error);
         ctx.reply('Произошла ошибка при обработке вашего платежа. Пожалуйста, свяжитесь с поддержкой.');
@@ -432,13 +429,29 @@ bot.action('subscribe', async (ctx) => {
     ctx.scene.enter('subscribeScene');
 });
 
-// Функция обновления статуса оплаты пользователя
-async function updateUserPaymentStatus(userId, hasPaid) {
+// Функция обновления статуса оплаты пользователя с добавлением токенов и подписки
+async function updateUserPaymentStatus(userId, hasPaid, amountPaid) {
+    const tokensToAdd = amountPaid; // 100 рублей = 100 токенов, amountPaid должен быть в копейках
+    const subscriptionDuration = 30; // Срок подписки в днях
+
     try {
-        await User.findOneAndUpdate({ userId: userId }, { hasPaid: hasPaid });
-        console.log(`Статус оплаты для пользователя ${userId} обновлён на ${hasPaid}`);
+        const user = await User.findOne({ userId: userId });
+        if (user) {
+            user.hasPaid = hasPaid;
+            user.paymentDate = new Date(); // Записываем дату оплаты
+            user.tokens += tokensToAdd / 100; // Добавляем токены
+            user.subscriptionEndDate = new Date(user.paymentDate.getTime() + (subscriptionDuration * 24 * 60 * 60 * 1000)); // Устанавливаем дату окончания подписки
+
+            await user.save();
+            console.log(`Статус оплаты и токены для пользователя ${userId} обновлены. Токенов добавлено: ${tokensToAdd / 100}. Срок подписки до: ${user.subscriptionEndDate}`);
+
+            return tokensToAdd / 100; // Возвращаем количество добавленных токенов для последующего уведомления пользователя
+        } else {
+            throw new Error(`Пользователь с ID ${userId} не найден.`);
+        }
     } catch (error) {
-        console.error('Ошибка при обновлении статуса оплаты пользователя:', error);
+        console.error('Ошибка при обновлении статуса оплаты пользователя и добавлении токенов:', error);
+        throw error; // Пробрасываем ошибку дальше
     }
 }
 
@@ -538,18 +551,59 @@ bot.action(/delete_project_(.+)/, async (ctx) => {
 // Добавляем или обновляем пользователя в базе данных
 async function upsertUser(userId, username) {
     try {
-        const user = await User.findOneAndUpdate({ userId: userId }, {
-            userId: userId,
-            username: username,
-            $setOnInsert: { hasPaid: false }
-        }, { upsert: true, new: true, setDefaultsOnInsert: true });
+        // Поиск существующего пользователя
+        const existingUser = await User.findOne({ userId: userId }).exec();
 
-        return user;
+        if (existingUser) {
+            // Обновляем только имя пользователя, если пользователь уже существует
+            existingUser.username = username;
+            await existingUser.save();
+            return existingUser;
+        } else {
+            // Создание нового пользователя, если он не найден
+            const newUser = new User({
+                userId: userId,
+                username: username,
+                hasPaid: false,
+                // Инициализация полей для нового пользователя
+                tokens: 0, // Начальное количество токенов
+                subscriptionEndDate: null // Дата окончания подписки не установлена
+            });
+            await newUser.save();
+            return newUser;
+        }
     } catch (error) {
         console.error('Ошибка при добавлении/обновлении пользователя:', error);
         throw error; // Проброс ошибки дальше
     }
 }
+
+// Пример обновления статуса оплаты пользователя и добавления токенов/даты окончания подписки
+// async function updateUserPaymentStatus(userId, amountPaid) {
+//     try {
+//         // Извлечение соответствующего количества токенов из суммы оплаты
+//         // Предположим, что 100 копеек = 1 токен
+//         const tokensToAdd = amountPaid / 100; // или другой коэффициент, соответствующий вашей ценовой политике
+
+//         // Расчет даты окончания подписки
+//         const currentSubscriptionEndDate = new Date();
+//         currentSubscriptionEndDate.setDate(currentSubscriptionEndDate.getDate() + 30); // Добавляем 30 дней к текущей дате
+
+//         const user = await User.findOneAndUpdate({ userId: userId }, {
+//             $set: {
+//                 hasPaid: true,
+//                 subscriptionEndDate: currentSubscriptionEndDate
+//             },
+//             $inc: { tokens: tokensToAdd } // Увеличение на количество купленных токенов
+//         }, { new: true });
+
+//         console.log(`Статус оплаты и токены для пользователя ${userId} обновлены.`);
+//         return user;
+//     } catch (error) {
+//         console.error('Ошибка при обновлении статуса оплаты пользователя:', error);
+//         throw error;
+//     }
+// }
 
 async function hasUserPaid(userId) {
     try {
@@ -594,33 +648,27 @@ bot.on('message', async (ctx) => {
             await User.updateOne({ userId: userId }, { $unset: { isBlocked: "", blockExpiresAt: "" } });
         }
 
-        if (!user.hasPaid) {
+        // Проверка наличия токенов и действительности подписки
+        const currentDate = new Date();
+        if (user.tokens > 0 && user.subscriptionEndDate && currentDate <= new Date(user.subscriptionEndDate)) {
+            user.tokens -= 1; // Уменьшаем количество токенов на один
+            await user.save(); // Сохраняем изменения
+        } else {
+            // Если токенов нет или подписка истекла, удаляем сообщение и уведомляем пользователя
             await ctx.deleteMessage(ctx.message.message_id);
 
-            // Логика учета попыток отправки сообщений и блокировки пользователя
-            user.attemptCounter = (user.attemptCounter || 0) + 1;
-            if (user.attemptCounter >= 5) {
-                user.isBlocked = true;
-                user.blockExpiresAt = new Date(new Date().getTime() + 86400000); // Блокировка на 1 день
-                user.attemptCounter = 0; // Сброс счетчика попыток
-
-                // Сохраняем изменения в пользователе
-                await user.save();
-
-                // Уведомление о блокировке
-                ctx.replyWithMarkdown(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вам временно ограничена возможность отправки сообщений на 1 день за многократные попытки комментирования без оплаты.`);
-                return;
+            let replyText;
+            if (user.tokens <= 0) {
+                replyText = `Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), у вас закончились токены для комментирования. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`;
             } else {
-                // Сохраняем изменения в пользователе
-                await user.save();
+                // В случае если подписка истекла
+                replyText = `Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), ваша подписка на комментарии истекла. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`;
             }
 
-            // Отправка уведомления пользователю
-            const message = await ctx.replyWithMarkdown(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), у вас нет оплаченной возможности комментирования в этой группе.\n\n[Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`, {
+            const message = await ctx.replyWithMarkdown(replyText, {
                 disable_web_page_preview: true
             });
 
-            // Удаление уведомления через 10 секунд
             setTimeout(() => {
                 try {
                     ctx.deleteMessage(message.message_id);
@@ -631,6 +679,7 @@ bot.on('message', async (ctx) => {
         }
     }
 });
+
 
 
 // bot.on('document', async (ctx) => {
