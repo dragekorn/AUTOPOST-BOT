@@ -365,6 +365,55 @@ bot.action('buy', (ctx) => {
     });
 });
 
+// Обработчик кнопки "Комментарии"
+bot.action('comments', async (ctx) => {
+    try {
+        // Ваша логика для отображения информации о платеже или прямой переход к оплате
+        // Пример отправки инвойса пользователю через Telegram
+        ctx.replyWithInvoice({
+            title: 'Оплата доступа к комментариям',
+            description: 'Оплата возможности оставлять комментарии в группе.',
+            payload: 'unique_payload', // Уникальный идентификатор внутри вашего бота
+            provider_token: '381764678:TEST:79618', // Токен, полученный от ЮKassa
+            currency: 'RUB',
+            prices: [{ label: 'Доступ к комментариям', amount: 10000 }], // Сумма в минимальных единицах (копейках/центах)
+            start_parameter: 'get_access',
+            photo_url: 'URL_изображения_услуги',
+            is_flexible: false // Налог не применяется
+        });
+    } catch (error) {
+        console.error('Ошибка при попытке отправить инвойс:', error);
+        ctx.reply('Произошла ошибка при попытке отправить инвойс. Пожалуйста, попробуйте ещё раз.');
+    }
+});
+
+// Обработчик успешного платежа
+bot.on('successful_payment', async (ctx) => {
+    // ctx.update.message.successful_payment содержит детали успешного платежа
+    const successfulPayment = ctx.update.message.successful_payment;
+    console.log('Успешный платеж:', successfulPayment);
+
+    // Извлекаем userId из сообщения
+    const userId = ctx.update.message.from.id.toString();
+
+    try {
+        // Обновляем статус оплаты пользователя на true
+        await updateUserPaymentStatus(userId, true);
+
+        // Отправляем пользователю подтверждение об успешной оплате
+        ctx.reply('Спасибо за вашу оплату! Теперь вы можете оставлять комментарии в группе.');
+    } catch (error) {
+        console.error('Ошибка при обработке успешного платежа:', error);
+        ctx.reply('Произошла ошибка при обработке вашего платежа. Пожалуйста, свяжитесь с поддержкой.');
+    }
+});
+
+// Дополнительно: Обработчик pre_checkout_query
+bot.on('pre_checkout_query', (ctx) => {
+    // Telegram требует подтверждения pre_checkout_query
+    ctx.answerPreCheckoutQuery(true).catch(error => console.error('Ошибка при ответе на pre_checkout_query:', error));
+});
+
 bot.action('subscribe', async (ctx) => {
     const userId = ctx.from.id.toString();
     const user = await findUser(userId);
@@ -382,6 +431,16 @@ bot.action('subscribe', async (ctx) => {
     
     ctx.scene.enter('subscribeScene');
 });
+
+// Функция обновления статуса оплаты пользователя
+async function updateUserPaymentStatus(userId, hasPaid) {
+    try {
+        await User.findOneAndUpdate({ userId: userId }, { hasPaid: hasPaid });
+        console.log(`Статус оплаты для пользователя ${userId} обновлён на ${hasPaid}`);
+    } catch (error) {
+        console.error('Ошибка при обновлении статуса оплаты пользователя:', error);
+    }
+}
 
 bot.action('autopostfile', async (ctx) => {
     const userId = ctx.from.id.toString();
@@ -474,6 +533,104 @@ bot.action(/delete_project_(.+)/, async (ctx) => {
 });
 
 
+// ОПЛАТА И ПРОВЕРКА ВОЗМОЖНОСТИ КОММЕНТИРОВАНИЯ В СВЯЗАННОЙ ГРУППЕ
+
+// Добавляем или обновляем пользователя в базе данных
+async function upsertUser(userId, username) {
+    try {
+        const user = await User.findOneAndUpdate({ userId: userId }, {
+            userId: userId,
+            username: username,
+            $setOnInsert: { hasPaid: false }
+        }, { upsert: true, new: true, setDefaultsOnInsert: true });
+
+        return user;
+    } catch (error) {
+        console.error('Ошибка при добавлении/обновлении пользователя:', error);
+        throw error; // Проброс ошибки дальше
+    }
+}
+
+async function hasUserPaid(userId) {
+    try {
+        const user = await User.findOne({ 'telegramId': userId }).exec();
+        return user && user.hasPaid;
+    } catch (error) {
+        console.error('Ошибка при проверке статуса оплаты пользователя:', error);
+        return false;
+    }
+}
+
+
+bot.on('message', async (ctx) => {
+    // Пропускаем сообщения от ботов и пересланные сообщения из каналов
+    if (ctx.message.from.is_bot || ctx.message.forward_from_chat) {
+        return;
+    }
+
+    if (ctx.chat.type === 'supergroup' || ctx.chat.type === 'group') {
+        const userId = ctx.from.id.toString();
+        const username = ctx.from.username || `${ctx.from.first_name} ${ctx.from.last_name}`;
+
+        // Добавляем или обновляем пользователя в базе данных
+        const user = await upsertUser(userId, username);
+
+        // Проверяем, не является ли пользователь администратором
+        const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
+        const isAdmin = admins.some(admin => admin.user.id === parseInt(userId));
+
+        if (isAdmin) {
+            // Пропускаем обработку для администраторов
+            return;
+        }
+
+        // Проверка, не заблокирован ли пользователь
+        if (user.isBlocked && user.blockExpiresAt > new Date()) {
+            // Прекращаем обработку, если пользователь заблокирован
+            await ctx.deleteMessage(ctx.message.message_id);
+            return;
+        } else if (user.isBlocked && user.blockExpiresAt <= new Date()) {
+            // Разблокируем пользователя, если время блокировки истекло
+            await User.updateOne({ userId: userId }, { $unset: { isBlocked: "", blockExpiresAt: "" } });
+        }
+
+        if (!user.hasPaid) {
+            await ctx.deleteMessage(ctx.message.message_id);
+
+            // Логика учета попыток отправки сообщений и блокировки пользователя
+            user.attemptCounter = (user.attemptCounter || 0) + 1;
+            if (user.attemptCounter >= 5) {
+                user.isBlocked = true;
+                user.blockExpiresAt = new Date(new Date().getTime() + 86400000); // Блокировка на 1 день
+                user.attemptCounter = 0; // Сброс счетчика попыток
+
+                // Сохраняем изменения в пользователе
+                await user.save();
+
+                // Уведомление о блокировке
+                ctx.replyWithMarkdown(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вам временно ограничена возможность отправки сообщений на 1 день за многократные попытки комментирования без оплаты.`);
+                return;
+            } else {
+                // Сохраняем изменения в пользователе
+                await user.save();
+            }
+
+            // Отправка уведомления пользователю
+            const message = await ctx.replyWithMarkdown(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), у вас нет оплаченной возможности комментирования в этой группе.\n\n[Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`, {
+                disable_web_page_preview: true
+            });
+
+            // Удаление уведомления через 10 секунд
+            setTimeout(() => {
+                try {
+                    ctx.deleteMessage(message.message_id);
+                } catch (deleteError) {
+                    console.error('Ошибка при удалении уведомления:', deleteError);
+                }
+            }, 10000);
+        }
+    }
+});
 
 
 // bot.on('document', async (ctx) => {

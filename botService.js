@@ -16,6 +16,7 @@ const initializeBot = (token) => {
                 reply_markup: {
                     inline_keyboard: [
                         [{ text: '🔐 Авторизация', callback_data: 'auth' },{ text: '🛒 Купить ключ', callback_data: 'buy' }],
+                        [{ text: '💬 Комментарии', callback_data: 'comments' }]
                         
                     ],
                 },

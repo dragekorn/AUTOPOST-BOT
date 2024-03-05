@@ -33,7 +33,9 @@ const userSchema = new mongoose.Schema({
   userId: { type: String, unique: true },
   licKeys: { type: String, default: "" },
   username: { type: String },
-  channels: [{ type: String }]
+  channels: [{ type: String }],
+  hasPaid: { type: Boolean, default: false },
+  paymentDate: { type: Date }
 });
 
 const User = mongoose.model('User', userSchema);
