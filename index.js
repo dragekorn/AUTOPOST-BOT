@@ -372,13 +372,13 @@ bot.action('comments', async (ctx) => {
         // Пример отправки инвойса пользователю через Telegram
         ctx.replyWithInvoice({
             title: 'Оплата доступа к комментариям',
-            description: 'Оплата возможности оставлять комментарии в группе.',
+            description: 'Вы оплачиваете услугу, которая позволит Вам безлимитно оставлять комментарии под выбраным постом. Так же Вы получаете 100 токенов на возможность комментирования всех записей.\n\n*Условия*',
             payload: 'unique_payload', // Уникальный идентификатор внутри вашего бота
             provider_token: '381764678:TEST:79618', // Токен, полученный от ЮKassa
             currency: 'RUB',
             prices: [{ label: 'Доступ к комментариям', amount: 10000 }], // Сумма в минимальных единицах (копейках/центах)
             start_parameter: 'get_access',
-            photo_url: 'URL_изображения_услуги',
+            photo_url: 'https://i.imgur.com/2ytIhrE.png',
             is_flexible: false // Налог не применяется
         });
     } catch (error) {
@@ -387,10 +387,13 @@ bot.action('comments', async (ctx) => {
     }
 });
 
+let awaitingPostForward = {};
+
 // Обработчик успешного платежа
 bot.on('successful_payment', async (ctx) => {
-    // Извлекаем userId и сумму платежа из сообщения
     const userId = ctx.update.message.from.id.toString();
+    awaitingPostForward[userId] = true;
+    console.log(`Платеж успешен: userId=${userId}`);
     const amountPaid = ctx.update.message.successful_payment.total_amount; // Сумма в минимальных единицах валюты (копейках)
 
     try {
@@ -398,12 +401,30 @@ bot.on('successful_payment', async (ctx) => {
         const tokensAdded = await updateUserPaymentStatus(userId, true, amountPaid);
 
         // Отправляем пользователю подтверждение об успешной оплате и информацию о добавленных токенах
-        ctx.reply(`Спасибо за вашу оплату! Вам добавлено ${tokensAdded} токенов для комментариев. Подписка действует в течение 30 дней.`);
+        await ctx.reply(`Спасибо за вашу оплату! Вам добавлено ${tokensAdded} токенов для комментариев. Подписка действует в течение 30 дней.\n\nТеперь, пожалуйста, отправьте ссылку на сообщение в чате обсуждений, к которому вы хотите получить доступ для комментирования.`);
     } catch (error) {
         console.error('Ошибка при обработке успешного платежа:', error);
         ctx.reply('Произошла ошибка при обработке вашего платежа. Пожалуйста, свяжитесь с поддержкой.');
     }
 });
+
+// Функция для добавления message_id в список разрешенных
+async function addUserAllowedMessageId(userId, messageId) {
+    // Приводим messageId к числу перед сохранением
+    const numericMessageId = parseInt(messageId, 10);
+    try {
+        const user = await User.findOne({ userId: userId });
+        if (user) {
+            if (!user.allowedMessageIds.includes(numericMessageId)) {
+                user.allowedMessageIds.push(numericMessageId);
+                await user.save();
+                console.log(`Добавлен доступ к комментированию: userId=${userId}, messageId=${numericMessageId}`);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при добавлении message_id:', error);
+    }
+}
 
 // Дополнительно: Обработчик pre_checkout_query
 bot.on('pre_checkout_query', (ctx) => {
@@ -578,33 +599,6 @@ async function upsertUser(userId, username) {
     }
 }
 
-// Пример обновления статуса оплаты пользователя и добавления токенов/даты окончания подписки
-// async function updateUserPaymentStatus(userId, amountPaid) {
-//     try {
-//         // Извлечение соответствующего количества токенов из суммы оплаты
-//         // Предположим, что 100 копеек = 1 токен
-//         const tokensToAdd = amountPaid / 100; // или другой коэффициент, соответствующий вашей ценовой политике
-
-//         // Расчет даты окончания подписки
-//         const currentSubscriptionEndDate = new Date();
-//         currentSubscriptionEndDate.setDate(currentSubscriptionEndDate.getDate() + 30); // Добавляем 30 дней к текущей дате
-
-//         const user = await User.findOneAndUpdate({ userId: userId }, {
-//             $set: {
-//                 hasPaid: true,
-//                 subscriptionEndDate: currentSubscriptionEndDate
-//             },
-//             $inc: { tokens: tokensToAdd } // Увеличение на количество купленных токенов
-//         }, { new: true });
-
-//         console.log(`Статус оплаты и токены для пользователя ${userId} обновлены.`);
-//         return user;
-//     } catch (error) {
-//         console.error('Ошибка при обновлении статуса оплаты пользователя:', error);
-//         throw error;
-//     }
-// }
-
 async function hasUserPaid(userId) {
     try {
         const user = await User.findOne({ 'telegramId': userId }).exec();
@@ -615,94 +609,132 @@ async function hasUserPaid(userId) {
     }
 }
 
+// Функция проверки, может ли пользователь комментировать сообщение
+async function canUserCommentOnPost(userId, messageId) {
+    const user = await User.findOne({ userId: userId });
+    const numericMessageId = parseInt(messageId, 10);
+    const canComment = user && user.allowedMessageIds.includes(numericMessageId);
+    console.log(`Проверка комментирования: user=${userId}, messageId=${messageId}, canComment=${canComment}`);
+    return canComment;
+}
 
 bot.on('message', async (ctx) => {
-    // Пропускаем сообщения от ботов и пересланные сообщения из каналов
+    const userId = ctx.from.id.toString();
+    const currentDate = new Date();
+    const user = await upsertUser(userId, ctx.from.username || `${ctx.from.first_name} ${ctx.from.last_name}`);
+
+    // Проверка на блокировку пользователя
+    if (user.isBlocked && currentDate <= user.blockExpiresAt) {
+        console.log(`Пользователь ${userId} пытался написать сообщение, но он заблокирован до ${user.blockExpiresAt}.`);
+        await ctx.deleteMessage(ctx.message.message_id);
+        ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы заблокированы до ${user.blockExpiresAt}. Вы не можете отправлять сообщения до окончания блокировки.`, {
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true
+        });
+        return; // Прекращаем обработку сообщения для заблокированных пользователей
+    }
+
+    if (awaitingPostForward[userId]) {
+        const messageText = ctx.message.text;
+        const match = messageText.match(/https:\/\/t.me\/[^\/]+\/(\d+)/);
+        if (match) {
+            const discussionMessageId = parseInt(match[1], 10);
+            await addUserAllowedMessageId(userId, discussionMessageId);
+            ctx.reply('Вы получили доступ к комментированию выбранного сообщения.');
+            awaitingPostForward[userId] = false;
+        } else {
+            ctx.reply('Пожалуйста, отправьте корректную ссылку на сообщение в чате обсуждений.');
+        }
+        return;
+    }
+
     if (ctx.message.from.is_bot || ctx.message.forward_from_chat) {
         return;
     }
 
     if (ctx.chat.type === 'supergroup' || ctx.chat.type === 'group') {
-        const userId = ctx.from.id.toString();
-        const username = ctx.from.username || `${ctx.from.first_name} ${ctx.from.last_name}`;
-
-        // Добавляем или обновляем пользователя в базе данных
-        const user = await upsertUser(userId, username);
-
-        // Проверяем, не является ли пользователь администратором
-        const admins = await ctx.telegram.getChatAdministrators(ctx.chat.id);
-        const isAdmin = admins.some(admin => admin.user.id === parseInt(userId));
-
-        if (isAdmin) {
-            // Пропускаем обработку для администраторов
-            return;
-        }
-
-        // Проверка, не заблокирован ли пользователь
-        if (user.isBlocked && user.blockExpiresAt > new Date()) {
-            // Прекращаем обработку, если пользователь заблокирован
-            await ctx.deleteMessage(ctx.message.message_id);
-            return;
-        } else if (user.isBlocked && user.blockExpiresAt <= new Date()) {
-            // Разблокируем пользователя, если время блокировки истекло
-            await User.updateOne({ userId: userId }, { $unset: { isBlocked: "", blockExpiresAt: "" } });
-        }
-
-        // Проверка наличия токенов и действительности подписки
         const currentDate = new Date();
-        if (user.tokens > 0 && user.subscriptionEndDate && currentDate <= new Date(user.subscriptionEndDate)) {
-            user.tokens -= 1; // Уменьшаем количество токенов на один
-            await user.save(); // Сохраняем изменения
-        } else {
-            // Если токенов нет или подписка истекла, удаляем сообщение и уведомляем пользователя
-            await ctx.deleteMessage(ctx.message.message_id);
+        const user = await upsertUser(userId, ctx.from.username || `${ctx.from.first_name} ${ctx.from.last_name}`);
+        const isAdmin = (await ctx.telegram.getChatAdministrators(ctx.chat.id)).some(admin => admin.user.id === parseInt(userId));
 
-            let replyText;
-            if (user.tokens <= 0) {
-                replyText = `Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), у вас закончились токены для комментирования. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`;
-            } else {
-                // В случае если подписка истекла
-                replyText = `Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), ваша подписка на комментарии истекла. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`;
-            }
-
-            const message = await ctx.replyWithMarkdown(replyText, {
-                disable_web_page_preview: true
-            });
-
-            setTimeout(() => {
-                try {
-                    ctx.deleteMessage(message.message_id);
-                } catch (deleteError) {
-                    console.error('Ошибка при удалении уведомления:', deleteError);
-                }
-            }, 10000);
+        if (isAdmin || user.isBlocked && user.blockExpiresAt > currentDate) {
+            return;
         }
+
+        if (!ctx.message.reply_to_message) {
+            // Проверка на блокировку пользователя
+            if (user.isBlocked && currentDate <= user.blockExpiresAt) {
+                console.log(`Пользователь ${userId} пытался написать сообщение, но он заблокирован до ${user.blockExpiresAt}.`);
+                return; // Пользователь заблокирован, сообщение обрабатываться не будет
+            }
+        
+            if (user.tokens > 0 && user.subscriptionEndDate && currentDate <= user.subscriptionEndDate) {
+                user.tokens -= 1;
+                await user.save();
+                console.log(`Списан 1 токен за новый комментарий от пользователя ${userId}. Оставшиеся токены: ${user.tokens}.`);
+            } else {
+                user.warningCount = (user.warningCount || 0) + 1;
+                await user.save();
+        
+                if (user.warningCount >= 5) {
+                    user.isBlocked = true;
+                    user.blockExpiresAt = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000); // Блокируем на 24 часа
+                    user.warningCount = 0; // Сбрасываем счетчик предупреждений
+                    await user.save();
+        
+                    ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы временно заблокированы за частые попытки отправки сообщений без активной подписки. Блокировка будет снята через 24 часа.`, {
+                        parse_mode: 'Markdown',
+                        disable_web_page_preview: true
+                    });
+                } else {
+                    await ctx.deleteMessage(ctx.message.message_id);
+                    ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), у вас закончились токены для комментирования. У вас осталось предупреждений до блокировки: ${5 - user.warningCount}. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`, {
+                        parse_mode: 'Markdown',
+                        disable_web_page_preview: true
+                    });
+                }
+            }
+            return;
+        }
+
+        const replyToMessageId = ctx.message.reply_to_message.message_id;
+        const canComment = user.allowedMessageIds.includes(replyToMessageId) || (user.tokens > 0 && user.subscriptionEndDate && currentDate <= user.subscriptionEndDate);
+
+        if (canComment) {
+            if (!user.allowedMessageIds.includes(replyToMessageId)) { // Если комментируемый пост не разрешен, списываем токен
+                user.tokens -= 1;
+                await user.save();
+                console.log(`Списан 1 токен за комментирование поста пользователем ${userId}. Оставшиеся токены: ${user.tokens}.`);
+            }
+        } else {
+            // Увеличиваем количество предупреждений
+            user.warningCount = (user.warningCount || 0) + 1;
+            if (user.warningCount >= 5) {
+                // Блокируем пользователя на 24 часа
+                user.isBlocked = true;
+                user.blockExpiresAt = new Date(new Date().getTime() + 24 * 60 * 60 * 1000); // Добавляем 24 часа к текущему времени
+                user.warningCount = 0; // Сбрасываем счётчик предупреждений
+                await user.save();
+                
+                ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы временно заблокированы за частые попытки комментирования без подписки. Блокировка будет снята через 24 часа.`, {
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true
+                });
+            } else {
+                await user.save();
+        
+                ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), к сожалению, у вас нет доступа к комментированию этого сообщения. У вас осталось предупреждений до блокировки: ${5 - user.warningCount}.\n\nПриобретите доступ, чтобы продолжить комментирование. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`, {
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true
+                });
+            }
+        
+            await ctx.deleteMessage(ctx.message.message_id);
+        }
+        
+        
     }
 });
-
-
-
-// bot.on('document', async (ctx) => {
-//     if (ctx.session && ctx.session.awaitingFile) {
-//         try {
-
-//             const chatId = ctx.chat.id;
-//             const fileId = ctx.message.document.file_id;
-//             const fileLink = await ctx.telegram.getFileLink(fileId);
-
-//             ctx.reply('Файл получен, начинаю обработку...');
-
-//             await processFile(ctx, fileLink);
-//         } catch (error) {
-//             console.error('Ошибка при обработке файла:', error);
-//             ctx.reply('Произошла ошибка при обработке файла.');
-//         }
-
-//         delete ctx.session.awaitingFile;
-//     } else {
-//         ctx.reply('Отправьте файл после активации команды автопостинга через /autopostfile');
-//     }
-// });
 
 bot.action(/delete_(.+)/, async (ctx) => {
     const subId = parseInt(ctx.match[1]);

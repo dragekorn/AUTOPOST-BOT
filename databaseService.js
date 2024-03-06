@@ -35,9 +35,13 @@ const userSchema = new mongoose.Schema({
   username: { type: String },
   channels: [{ type: String }],
   hasPaid: { type: Boolean, default: false },
+  isBlocked: { type: Boolean, default: false },
   paymentDate: { type: Date },
   tokens: { type: Number, default: 0 },
-  subscriptionEndDate: { type: Date } 
+  subscriptionEndDate: { type: Date },
+  warningCount: { type: Number, default: 0 },
+  blockExpiresAt: { type: Date },
+  allowedMessageIds: [{ type: Number }]
 });
 
 const User = mongoose.model('User', userSchema);
