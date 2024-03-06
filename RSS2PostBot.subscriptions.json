@@ -1,0 +1,413 @@
+[{
+  "_id": {
+    "$oid": "65bc9efb604f4676ceba77b5"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.cnews.ru/inc/rss/news.xml",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65c879e278041106b902bb95"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.calend.ru/calendar/feed/",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "subId": {
+    "$numberLong": "1707637218512"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65c87a0778041106b902bb9e"
+  },
+  "userId": "714276348",
+  "rssLink": "https://russian.rt.com/rss",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "subId": {
+    "$numberLong": "1707637255037"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65c87a2e78041106b902bbaa"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.sports.ru/rss/topnews/automoto.xml",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "subId": {
+    "$numberLong": "1707637294078"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65c87a4b78041106b902bbae"
+  },
+  "userId": "714276348",
+  "rssLink": "https://russian.rt.com/rss",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707637323088"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65c87a6078041106b902bbc6"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.sostav.ru/rss",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707637344625"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65c87abf78041106b902bbe6"
+  },
+  "userId": "714276348",
+  "rssLink": "https://communicationservice.ru/feed_rss_created.xml",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707637439720"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65c8dac79b4ef105718c4bf9"
+  },
+  "userId": "714276348",
+  "rssLink": "https://communicationservice.ru/feed_rss_created.xml",
+  "channelId": "-1002039345701",
+  "channelName": "ПРОД -1002039345701",
+  "subId": {
+    "$numberLong": "1707662023923"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce3a35a7a70a402442d1f"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.rt.com/rss-feed/",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707926435446"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce3e05a7a70a402442d44"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.rt.com/rss/news/",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707926496314"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce4265a7a70a402442d82"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.rt.com/rss/russia/",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707926566001"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce43c5a7a70a402442db8"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.rt.com/rss/business/",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707926588881"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce4715a7a70a402442dfc"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.rt.com/rss/op-ed/",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707926641217"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce4865a7a70a402442e04"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.rt.com/rss/pop-culture/",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707926662145"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce4b35a7a70a402442e4a"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.rt.com/rss/podcasts/",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707926707810"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cce8af5a7a70a4024431aa"
+  },
+  "userId": "714276348",
+  "rssLink": "https://tass.com/rss/v2.xml",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707927727742"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cceb2e5a7a70a4024433b1"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/EngRssNews",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707928366436"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccebf25a7a70a402443492"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/engeventrss",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707928562276"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccec2d5a7a70a4024434c9"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/EngRssPress",
+  "channelId": "-1001744198414",
+  "channelName": "One Must Know",
+  "subId": {
+    "$numberLong": "1707928621673"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccecc35a7a70a402443567"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/RssNews",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707928771720"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cced7f5a7a70a40244363a"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/RssNews",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "subId": {
+    "$numberLong": "1707928959135"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccefb25a7a70a40244389e"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/RssNews",
+  "channelId": "-1002039345701",
+  "channelName": "ПРОД Всё о компаниях",
+  "subId": {
+    "$numberLong": "1707929522749"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccefee5a7a70a4024438db"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/eventrss",
+  "channelId": "-1002039345701",
+  "channelName": "ПРОД Всё о компаниях",
+  "subId": {
+    "$numberLong": "1707929582679"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccf0065a7a70a4024438e3"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/eventrss",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "subId": {
+    "$numberLong": "1707929606704"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccf0245a7a70a402443951"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/eventrss",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707929636933"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccf0565a7a70a40244395b"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/RssPress",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707929686307"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccf08f49d3faa59dd35361"
+  },
+  "userId": "714276348",
+  "rssLink": "https://cbr.ru/rss/RssPress",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "subId": {
+    "$numberLong": "1707929743159"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65ccffc249d3faa59dd36192"
+  },
+  "userId": "714276348",
+  "rssLink": "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707933634506"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cd020649d3faa59dd363d0"
+  },
+  "userId": "714276348",
+  "rssLink": "https://zakupki.gov.ru/epz/contract/search/rss",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1707934214334"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65cf4a6e8a05839459b3b664"
+  },
+  "userId": "714276348",
+  "rssLink": "https://www.anekdot.ru/rss/export_j.xml",
+  "channelId": "-1002061365939",
+  "channelName": "Анекдот Ильярион",
+  "subId": {
+    "$numberLong": "1708083822258"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65d61bac52eb362387116d9e"
+  },
+  "userId": "714276348",
+  "rssLink": "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
+  "channelId": "-1001926515172",
+  "channelName": "Новостной Кашак",
+  "subId": {
+    "$numberLong": "1708530604764"
+  },
+  "__v": 0
+},
+{
+  "_id": {
+    "$oid": "65d61bf052eb362387116def"
+  },
+  "userId": "714276348",
+  "rssLink": "https://rssexport.rbc.ru/rbcnews/news/30/full.rss",
+  "channelId": "-1001257114171",
+  "channelName": "Все о компаниях",
+  "subId": {
+    "$numberLong": "1708530672546"
+  },
+  "__v": 0
+}]
