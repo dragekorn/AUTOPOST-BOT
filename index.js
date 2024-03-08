@@ -626,12 +626,15 @@ bot.on('message', async (ctx) => {
     // Проверка на блокировку пользователя
     if (user.isBlocked && currentDate <= user.blockExpiresAt) {
         console.log(`Пользователь ${userId} пытался написать сообщение, но он заблокирован до ${user.blockExpiresAt}.`);
+        
         await ctx.deleteMessage(ctx.message.message_id);
+
         ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы заблокированы до ${user.blockExpiresAt}. Вы не можете отправлять сообщения до окончания блокировки.`, {
             parse_mode: 'Markdown',
             disable_web_page_preview: true
         });
         return; // Прекращаем обработку сообщения для заблокированных пользователей
+
     }
 
     if (awaitingPostForward[userId]) {
@@ -675,23 +678,48 @@ bot.on('message', async (ctx) => {
             } else {
                 user.warningCount = (user.warningCount || 0) + 1;
                 await user.save();
-        
+
                 if (user.warningCount >= 5) {
                     user.isBlocked = true;
                     user.blockExpiresAt = new Date(currentDate.getTime() + 24 * 60 * 60 * 1000); // Блокируем на 24 часа
                     user.warningCount = 0; // Сбрасываем счетчик предупреждений
                     await user.save();
-        
-                    ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы временно заблокированы за частые попытки отправки сообщений без активной подписки. Блокировка будет снята через 24 часа.`, {
+                    
+                    // Отправляем сообщение и запоминаем его ID для последующего удаления
+                    const replyMessage = await ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы временно заблокированы за частые попытки отправки сообщений без активной подписки. Блокировка будет снята через 24 часа.`, {
                         parse_mode: 'Markdown',
-                        disable_web_page_preview: true
+                        disable_web_page_preview: true,
+                        reply_to_message_id: ctx.message.message_id
                     });
+                    
+                    // Удаляем сообщение пользователя
+                    await ctx.deleteMessage(ctx.message.message_id);
+                    
+                    // Удаляем сообщение бота через 30 секунд
+                    setTimeout(async () => {
+                        try {
+                            await ctx.telegram.deleteMessage(replyMessage.chat.id, replyMessage.message_id);
+                        } catch (error) {
+                            console.error("Ошибка при попытке удалить сообщение бота: ", error);
+                        }
+                    }, 30000); // 30 секунд
                 } else {
                     await ctx.deleteMessage(ctx.message.message_id);
-                    ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), у вас закончились токены для комментирования. У вас осталось предупреждений до блокировки: ${5 - user.warningCount}. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`, {
+                    
+                    const replyMessage = ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), у вас закончились токены для комментирования. У вас осталось предупреждений до блокировки: ${5 - user.warningCount}. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`, {
                         parse_mode: 'Markdown',
-                        disable_web_page_preview: true
+                        disable_web_page_preview: true,
+                        reply_to_message_id: ctx.message.message_id
                     });
+
+                    // Через 30 секунд удаляем сообщение бота
+                        setTimeout(async () => {
+                            try {
+                                await ctx.deleteMessage(replyMessage.message_id);
+                            } catch (error) {
+                                console.error("Ошибка при попытке удалить сообщение бота: ", error);
+                            }
+                        }, 30000); // 30 секунд в миллисекундах
                 }
             }
             return;
@@ -709,30 +737,41 @@ bot.on('message', async (ctx) => {
         } else {
             // Увеличиваем количество предупреждений
             user.warningCount = (user.warningCount || 0) + 1;
+            await user.save();
+        
+            let replyText;
+        
             if (user.warningCount >= 5) {
                 // Блокируем пользователя на 24 часа
                 user.isBlocked = true;
                 user.blockExpiresAt = new Date(new Date().getTime() + 24 * 60 * 60 * 1000); // Добавляем 24 часа к текущему времени
                 user.warningCount = 0; // Сбрасываем счётчик предупреждений
                 await user.save();
-                
-                ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы временно заблокированы за частые попытки комментирования без подписки. Блокировка будет снята через 24 часа.`, {
-                    parse_mode: 'Markdown',
-                    disable_web_page_preview: true
-                });
-            } else {
-                await user.save();
         
-                ctx.reply(`Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), к сожалению, у вас нет доступа к комментированию этого сообщения. У вас осталось предупреждений до блокировки: ${5 - user.warningCount}.\n\nПриобретите доступ, чтобы продолжить комментирование. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`, {
-                    parse_mode: 'Markdown',
-                    disable_web_page_preview: true
-                });
+                replyText = `Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), вы временно заблокированы за частые попытки комментирования без подписки. Блокировка будет снята через 24 часа.`;
+            } else {
+                replyText = `Уважаемый [${ctx.from.first_name}](tg://user?id=${userId}), к сожалению, у вас нет доступа к комментированию этого сообщения. У вас осталось предупреждений до блокировки: ${5 - user.warningCount}.\n\nПриобретите доступ, чтобы продолжить комментирование. [Оплатить доступ](https://telegra.ph/Oplata-vozmozhnosti-kommentirovaniya-03-05)`;
             }
         
+            // Отправляем сообщение и запоминаем его ID
+            const replyMessage = await ctx.reply(replyText, {
+                parse_mode: 'Markdown',
+                disable_web_page_preview: true,
+                reply_to_message_id: ctx.message.message_id
+            });
+        
+            // Удаляем сообщение пользователя
             await ctx.deleteMessage(ctx.message.message_id);
+        
+            // Удаляем сообщение бота через 30 секунд
+            setTimeout(async () => {
+                try {
+                    await ctx.telegram.deleteMessage(replyMessage.chat.id, replyMessage.message_id);
+                } catch (error) {
+                    console.error("Ошибка при попытке удалить сообщение бота: ", error);
+                }
+            }, 30000); // 30 секунд
         }
-        
-        
     }
 });
 
